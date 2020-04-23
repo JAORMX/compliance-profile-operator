@@ -156,6 +156,13 @@ TODO
 
 * Implement **variables** in the **TailoredProfile** object.
 
+* Set **TailoredProfile** objects to be "owned" (via the
+  `setControllerReference` function) by the **Profile** object it extends. This
+  way they can be garbage collected if the Profile is deleted.
+
+* Prepend the name of the **ProfileBundle** when generating profiles. This way
+  the profiles can easily be differentiated.
+
 References
 ----------
 
