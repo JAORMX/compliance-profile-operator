@@ -74,6 +74,67 @@ Where:
   give us information about the data type, the default value, and the current
   value that’s set for that variable.
 
+## TailoredProfile
+
+A **TailoredProfile** is an object that represents changes that need to be done
+for a specific profile. Given that profiles are meant to be immutable, these
+changes need a specific object (which is this one).
+
+Example:
+
+```
+kind: TailoredProfile
+apiVersion: compliance.openshift.io/v1alpha1
+metadata:
+  name: moderate-custom
+spec:
+  extends: moderate
+  title: | 
+    NIST 800-53 Moderate-Impact Baseline for Red Hat Enterprise Linux
+    CoreOS customized for this deployment
+  description: |
+    This compliance profile reflects the core set of Moderate-Impact
+    Baseline configuration settings for deployment of Red Hat
+    Enterprise
+    …
+  enableRules:
+    - ruleName: chronyd_client_only
+      rationale: We really need to enable this
+  disableRules:
+    - ruleName: chronyd_no_chronyc_network
+      rationale: This doesn’t apply to my cluster
+  variables:
+    - var_password_pam_difok: 5
+status:
+  id: xccdf_org.ssgproject.content_profile_ocp4-moderate-custom
+  tailoringConfigMap:
+    name: moderate-custom-tp
+    namespace: this-namespace
+```
+
+Where:
+
+* **name**: Is simply the name of the tailored profile, however, this name will
+  be taken into account when generating the tailoring file and the xccdf ID
+  will be derived from this.
+* **spec.extends**: should be an existing Profile object which we want to
+  extend as part of this tailoring. From here we’ll derive several attributes
+* **spec.title**: the new title for this customized profile. If this isn’t
+  specified, the same title as the profile that’s being extended will be used.
+* **spec.description**: the new description for this customized profile. If
+  this isn’t specified the same description from the profile that’s being
+  extended will be used.
+* **spec.enableRules**: Checks to be enabled (if they were disabled before) as
+  part of this customized profile.
+* **disableRules**: Checks to be disabled (if they were enabled before) as part
+  of this customized profile.
+* **spec.variables**: Set values of variables from the profile.
+* **status.id**: This is the xccdf ID to take the profile into use with the
+  oscap tool.
+* **status.tailoringConfigMap**: Once a tailored profile has been processed,
+  the XML will be outputted as a ConfigMap. This ConfigMap will simply be the
+  raw XML generated for the tailoring and can be taken into use directly.
+
 TODO
 ----
 
@@ -88,6 +149,12 @@ TODO
   less permissions. There already is a `profileparser` service account
   available (from the `deploy/service_account.yaml` file), however, using it
   causes an unknown issue in the workload. RBAC problems are suspected.
+
+* Actually generate a **TailoredProfile** ConfigMap. Currently it generates a
+  ConfigMap with empty content. We need the controller to actually parse what's
+  needed and generate the XML file.
+
+* Implement **variables** in the **TailoredProfile** object.
 
 References
 ----------

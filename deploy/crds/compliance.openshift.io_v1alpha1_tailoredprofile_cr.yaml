@@ -1,0 +1,6 @@
+apiVersion: compliance.openshift.io/v1alpha1
+kind: TailoredProfile
+metadata:
+  name: example-tailoredprofile
+spec:
+  extends: moderate

@@ -71,6 +71,7 @@ rules:
   resources:
   - '*'
   - profiles
+  - tailoredprofiles
   verbs:
   - create
   - delete
