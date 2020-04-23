@@ -30,7 +30,7 @@ status:
 Where:
 
 * **spec.contentImage**: Contains a path to a container image to take into use
-* **spec.contentFile**: is the path to access the datastream file whithin the
+* **spec.contentFile**: is the path to access the datastream file within the
   image.
 * **status.dataStreamStatus**: Will show the status of the datastream. e.g.
   whether it's usable or not (valid or invalid). If invalid, an error message
@@ -87,7 +87,7 @@ TODO
   operator. This is not ideal as we really want to use a service account with
   less permissions. There already is a `profileparser` service account
   available (from the `deploy/service_account.yaml` file), however, using it
-  causes an unkown issue in the workload. RBAC problems are suspected.
+  causes an unknown issue in the workload. RBAC problems are suspected.
 
 References
 ----------
