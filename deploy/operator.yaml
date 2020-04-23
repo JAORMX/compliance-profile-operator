@@ -19,7 +19,6 @@ spec:
       containers:
         - name: compliance-profile-operator
           image: quay.io/compliance-profile-operator/manager:latest
-          # image: image-registry.openshift-image-registry.svc:5000/openshift-compliance-profile-operator/manager:latest
           command:
           - compliance-profile-operator
           imagePullPolicy: Always
@@ -36,4 +35,3 @@ spec:
               value: "compliance-profile-operator"
             - name: PROFILEPARSER_IMAGE
               value: "quay.io/compliance-profile-operator/profileparser:latest"
-              #value: image-registry.openshift-image-registry.svc:5000/openshift-compliance-profile-operator/profileparser:latest

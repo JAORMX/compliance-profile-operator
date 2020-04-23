@@ -36,6 +36,8 @@ PKGS=$(shell go list ./... | grep -v -E '/vendor/|/test|/examples')
 # go source files, ignore vendor directory
 SRC = $(shell find . -type f -name '*.go' -not -path "./vendor/*" -not -path "./_output/*")
 
+# Skip pushing the container to your cluster
+SKIP_CONTAINER_PUSH?=false
 
 # Kubernetes variables
 # ====================
@@ -50,9 +52,7 @@ OPERATOR_SDK_URL=https://github.com/operator-framework/operator-sdk/releases/dow
 # Test variables
 # ==============
 TEST_OPTIONS?=
-# Skip pushing the container to your cluster
-E2E_SKIP_CONTAINER_PUSH?=false
-# Use default images in the e2e test run. Note that this takes precedence over E2E_SKIP_CONTAINER_PUSH
+# Use default images in the e2e test run. Note that this takes precedence over SKIP_CONTAINER_PUSH
 E2E_USE_DEFAULT_IMAGES?=false
 
 # Pass extra flags to the e2e test run.
@@ -171,7 +171,7 @@ endif
 
 # This runs the end-to-end tests. If not running this on CI, it'll try to
 # push the operator image to the cluster's registry. This behavior can be
-# avoided with the E2E_SKIP_CONTAINER_PUSH environment variable.
+# avoided with the SKIP_CONTAINER_PUSH environment variable.
 .PHONY: e2e
 e2e: namespace operator-sdk image-to-cluster openshift-user ## Run the end-to-end tests (not implemented yet)
 	@echo "WARNING: This will temporarily modify deploy/operator.yaml"
@@ -202,7 +202,7 @@ e2e-local: operator-sdk ## Run the end-to-end tests on a locally running operato
 # Note that the `component` names come from the `openshift/release` repo
 # config.
 #
-# If the E2E_SKIP_CONTAINER_PUSH environment variable is used, the target will
+# If the SKIP_CONTAINER_PUSH environment variable is used, the target will
 # assume that you've pushed images beforehand, and will merely set the
 # necessary variables to use them.
 #
@@ -220,9 +220,9 @@ image-to-cluster:
 else ifeq ($(E2E_USE_DEFAULT_IMAGES), true)
 image-to-cluster:
 	@echo "E2E_USE_DEFAULT_IMAGES variable detected. Using default images."
-else ifeq ($(E2E_SKIP_CONTAINER_PUSH), true)
+else ifeq ($(SKIP_CONTAINER_PUSH), true)
 image-to-cluster:
-	@echo "E2E_SKIP_CONTAINER_PUSH variable detected. Using previously pushed images."
+	@echo "SKIP_CONTAINER_PUSH variable detected. Using previously pushed images."
 	$(eval OPERATOR_IMAGE_PATH = image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/$(OPERATOR_IMAGE_NAME):$(TAG))
 	$(eval PROFILEPARSER_IMAGE_PATH = image-registry.openshift-image-registry.svc:5000/$(NAMESPACE)/$(PROFILEPARSER_IMAGE_NAME):$(TAG))
 else
@@ -245,6 +245,24 @@ endif
 namespace:
 	@echo "Creating '$(NAMESPACE)' namespace/project"
 	@oc apply -f deploy/ns.yaml
+
+.PHONY: deploy
+deploy: namespace deploy-crds ## Deploy the operator from the manifests in the deploy/ directory
+	@oc apply -f deploy/
+
+.PHONY: deploy-local
+deploy-local: namespace image-to-cluster deploy-crds ## Deploy the operator from the manifests in the deploy/ directory and the images from a local build (If you've already pushed the images to the cluster, you can skip subsequent image pushing with the SKIP_CONTAINER_PUSH env variable)
+	@sed -i 's%$(IMAGE_REPO)/$(OPERATOR_IMAGE_NAME):latest%$(OPERATOR_IMAGE_PATH)%' deploy/operator.yaml
+	@sed -i 's%$(IMAGE_REPO)/$(PROFILEPARSER_IMAGE_NAME):latest%$(PROFILEPARSER_IMAGE_PATH)%' deploy/operator.yaml
+	@oc apply -f deploy/
+	@sed -i 's%$(PROFILEPARSER_IMAGE_PATH)%$(IMAGE_REPO)/$(PROFILEPARSER_IMAGE_NAME):latest%' deploy/operator.yaml
+	@sed -i 's%$(OPERATOR_IMAGE_PATH)%$(IMAGE_REPO)/$(OPERATOR_IMAGE_NAME):latest%' deploy/operator.yaml
+
+.PHONY: deploy-local
+deploy-crds:
+	@for crd in $(shell ls -1 deploy/crds/*crd.yaml) ; do \
+		oc apply -f $$crd ; \
+	done
 
 .PHONY: openshift-user
 openshift-user:
