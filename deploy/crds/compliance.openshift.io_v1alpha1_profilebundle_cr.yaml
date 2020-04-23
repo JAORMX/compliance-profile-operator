@@ -1,0 +1,7 @@
+apiVersion: compliance.openshift.io/v1alpha1
+kind: ProfileBundle
+metadata:
+  name: example-profilebundle
+spec:
+  contentImage: quay.io/jhrozek/ocp4-openscap-content:latest
+  contentFile: ssg-ocp4-ds.xml

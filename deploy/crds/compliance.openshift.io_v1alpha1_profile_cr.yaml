@@ -1,0 +1,6 @@
+apiVersion: compliance.openshift.io/v1alpha1
+kind: Profile
+metadata:
+  name: example-profile
+spec:
+  contentImage: quay.io/jhrozek/ocp4-openscap-content:latest

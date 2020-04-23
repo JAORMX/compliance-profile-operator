@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: compliance-profile-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: compliance-profile-operator
+  template:
+    metadata:
+      labels:
+        name: compliance-profile-operator
+      annotations:
+        # Set this to the namespaces that this operator will watch
+        olm.targetNamespaces: openshift-compliance-profile-operator
+    spec:
+      serviceAccountName: compliance-profile-operator
+      containers:
+        - name: compliance-profile-operator
+          image: quay.io/compliance-profile-operator/manager:latest
+          # image: image-registry.openshift-image-registry.svc:5000/openshift-compliance-profile-operator/manager:latest
+          command:
+          - compliance-profile-operator
+          imagePullPolicy: Always
+          env:
+            - name: WATCH_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.annotations['olm.targetNamespaces']
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPERATOR_NAME
+              value: "compliance-profile-operator"
+            - name: PROFILEPARSER_IMAGE
+              value: "quay.io/compliance-profile-operator/profileparser:latest"
+              #value: image-registry.openshift-image-registry.svc:5000/openshift-compliance-profile-operator/profileparser:latest
