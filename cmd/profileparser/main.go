@@ -228,6 +228,9 @@ func getRuleNameFromID(id string) string {
 	const idPrefix = "xccdf_org.ssgproject.content_rule_"
 	return strings.TrimPrefix(id, idPrefix)
 }
+func getPrefixedProfileName(pb *cmpv1alpha1.ProfileBundle, profileName string) string {
+	return pb.Name + "-" + profileName
+}
 
 // updateProfileBundleStatus updates the status of the given ProfileBundle. If
 // the given error is nil, the status will be valid, else it'll be invalid
@@ -276,6 +279,9 @@ func main() {
 
 	err = parseProfilesAndDo(bufContentFile, pcfg, func(p *cmpv1alpha1.Profile) error {
 		pCopy := p.DeepCopy()
+		profileName := pCopy.Name
+		// overwrite name
+		pCopy.SetName(getPrefixedProfileName(pb, profileName))
 
 		if err := controllerutil.SetControllerReference(pb, pCopy, pcfg.scheme); err != nil {
 			return err
