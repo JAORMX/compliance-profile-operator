@@ -155,6 +155,15 @@ TODO
 * Implement value specifications in the tailored profiles. Currently only
   selections are handled.
 
+* Create default ProfileBundle(s) when the operator starts. This would be
+  useful in the sense that we would already have an OpenShift bundle and
+  profiles created from it as a default.
+
+* Make profile parser workload overwrite existing profiles. In cases where the
+  profile might have been modified locally, it would be good to get the
+  profileparser workload to be able to update the profiles so they're back to a
+  good state.
+
 References
 ----------
 
