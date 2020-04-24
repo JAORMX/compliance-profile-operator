@@ -3,4 +3,4 @@ kind: TailoredProfile
 metadata:
   name: example-tailoredprofile
 spec:
-  extends: moderate
+  extends: example-profilebundle-moderate
