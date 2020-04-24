@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/JAORMX/compliance-profile-operator/pkg/xccdf"
+
 	compliancev1alpha1 "github.com/JAORMX/compliance-profile-operator/pkg/apis/compliance/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -21,6 +23,10 @@ import (
 )
 
 var log = logf.Log.WithName("controller_tailoredprofile")
+
+const (
+	tailoringFile string = "tailoring.xml"
+)
 
 // Add creates a new TailoredProfile Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -130,10 +136,18 @@ func (r *ReconcileTailoredProfile) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
+	pb, err := r.getProfileBundleFromProfile(p)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	// Get tailored profile config map
 	tpcm := newTailoredProfileCM(instance)
 
-	// TODO(jaosorior): Parse the profile and set the appropriate data into the ConfigMap
+	tpcm.Data[tailoringFile], err = xccdf.TailoredProfileToXML(instance, p, pb)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
 
 	// Set TailoredProfile instance as the owner and controller
 	if err := controllerutil.SetControllerReference(instance, tpcm, r.scheme); err != nil {
@@ -188,6 +202,28 @@ func (r *ReconcileTailoredProfile) updateTailoredProfileStatusError(tp *complian
 	return r.client.Status().Update(context.TODO(), tpCopy)
 }
 
+func (r *ReconcileTailoredProfile) getProfileBundleFromProfile(p *compliancev1alpha1.Profile) (*compliancev1alpha1.ProfileBundle, error) {
+	pbRef, err := getProfileBundleReferenceFromProfile(p)
+	if err != nil {
+		return nil, err
+	}
+
+	pb := compliancev1alpha1.ProfileBundle{}
+	// we use the profile's namespace as either way the object's have to be in the same namespace
+	// in order for OwnerReferences to work
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: pbRef.Name, Namespace: p.Namespace}, &pb)
+	return &pb, err
+}
+
+func getProfileBundleReferenceFromProfile(p *compliancev1alpha1.Profile) (*metav1.OwnerReference, error) {
+	for _, ref := range p.GetOwnerReferences() {
+		if ref.Kind == "ProfileBundle" && ref.APIVersion == compliancev1alpha1.SchemeGroupVersion.String() {
+			return ref.DeepCopy(), nil
+		}
+	}
+	return nil, fmt.Errorf("Profile '%s' had no owning ProfileBundle", p.Name)
+}
+
 // newTailoredProfileCM creates a tailored profile XML inside a configmap
 func newTailoredProfileCM(tp *compliancev1alpha1.TailoredProfile) *corev1.ConfigMap {
 	labels := map[string]string{
@@ -200,7 +236,7 @@ func newTailoredProfileCM(tp *compliancev1alpha1.TailoredProfile) *corev1.Config
 			Labels:    labels,
 		},
 		Data: map[string]string{
-			"tailoring.xml": "",
+			tailoringFile: "",
 		},
 	}
 }

@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	"github.com/operator-framework/operator-sdk/pkg/log/zap"
@@ -26,6 +25,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	cmpv1alpha1 "github.com/JAORMX/compliance-profile-operator/pkg/apis/compliance/v1alpha1"
+	"github.com/JAORMX/compliance-profile-operator/pkg/xccdf"
 	"github.com/JAORMX/compliance-profile-operator/version"
 )
 
@@ -179,7 +179,7 @@ func parseProfilesAndDo(dsReader io.Reader, pcfg *parserConfig, action func(p *c
 			}
 			selected := ruleObj.GetAttributeValue("selected")
 			if selected == "true" {
-				selectedrules = append(selectedrules, cmpv1alpha1.NewProfileRule(getRuleNameFromID(idref)))
+				selectedrules = append(selectedrules, cmpv1alpha1.NewProfileRule(xccdf.GetRuleNameFromID(idref)))
 			}
 		}
 
@@ -200,7 +200,7 @@ func parseProfilesAndDo(dsReader io.Reader, pcfg *parserConfig, action func(p *c
 				APIVersion: cmpv1alpha1.SchemeGroupVersion.String(),
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      getProfileNameFromID(id),
+				Name:      xccdf.GetProfileNameFromID(id),
 				Namespace: pcfg.profileBundleKey.Namespace,
 			},
 			ID:          id,
@@ -219,15 +219,6 @@ func parseProfilesAndDo(dsReader io.Reader, pcfg *parserConfig, action func(p *c
 	return nil
 }
 
-func getProfileNameFromID(id string) string {
-	const idPrefix = "xccdf_org.ssgproject.content_profile_"
-	return strings.TrimPrefix(id, idPrefix)
-}
-
-func getRuleNameFromID(id string) string {
-	const idPrefix = "xccdf_org.ssgproject.content_rule_"
-	return strings.TrimPrefix(id, idPrefix)
-}
 func getPrefixedProfileName(pb *cmpv1alpha1.ProfileBundle, profileName string) string {
 	return pb.Name + "-" + profileName
 }

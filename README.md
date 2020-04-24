@@ -150,11 +150,10 @@ TODO
   available (from the `deploy/service_account.yaml` file), however, using it
   causes an unknown issue in the workload. RBAC problems are suspected.
 
-* Actually generate a **TailoredProfile** ConfigMap. Currently it generates a
-  ConfigMap with empty content. We need the controller to actually parse what's
-  needed and generate the XML file.
-
 * Implement **variables** in the **TailoredProfile** object.
+
+* Implement value specifications in the tailored profiles. Currently only
+  selections are handled.
 
 References
 ----------

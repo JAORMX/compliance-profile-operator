@@ -4,3 +4,20 @@ metadata:
   name: example-tailoredprofile
 spec:
   extends: example-profilebundle-moderate
+  disableRules:
+    - name: file_permissions_node_config
+      rationale: testing this
+    - name: account_disable_post_pw_expiration
+      rationale: testing this
+    - name: accounts_no_uid_except_zero
+      rationale: testing this
+    - name: audit_rules_dac_modification_chmod
+      rationale: testing this
+    - name: audit_rules_dac_modification_chown
+      rationale: testing this
+    - name: audit_rules_dac_modification_fchmod
+      rationale: testing this
+    - name: audit_rules_dac_modification_fchmodat
+      rationale: testing this
+    - name: audit_rules_dac_modification_fchown
+      rationale: testing this
