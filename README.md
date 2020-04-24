@@ -156,10 +156,6 @@ TODO
 
 * Implement **variables** in the **TailoredProfile** object.
 
-* Set **TailoredProfile** objects to be "owned" (via the
-  `setControllerReference` function) by the **Profile** object it extends. This
-  way they can be garbage collected if the Profile is deleted.
-
 References
 ----------
 
