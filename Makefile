@@ -248,13 +248,13 @@ namespace:
 
 .PHONY: deploy
 deploy: namespace deploy-crds ## Deploy the operator from the manifests in the deploy/ directory
-	@oc apply -f deploy/
+	@oc apply -n $(NAMESPACE) -f deploy/
 
 .PHONY: deploy-local
 deploy-local: namespace image-to-cluster deploy-crds ## Deploy the operator from the manifests in the deploy/ directory and the images from a local build (If you've already pushed the images to the cluster, you can skip subsequent image pushing with the SKIP_CONTAINER_PUSH env variable)
 	@sed -i 's%$(IMAGE_REPO)/$(OPERATOR_IMAGE_NAME):latest%$(OPERATOR_IMAGE_PATH)%' deploy/operator.yaml
 	@sed -i 's%$(IMAGE_REPO)/$(PROFILEPARSER_IMAGE_NAME):latest%$(PROFILEPARSER_IMAGE_PATH)%' deploy/operator.yaml
-	@oc apply -f deploy/
+	@oc apply -n $(NAMESPACE) -f deploy/
 	@sed -i 's%$(PROFILEPARSER_IMAGE_PATH)%$(IMAGE_REPO)/$(PROFILEPARSER_IMAGE_NAME):latest%' deploy/operator.yaml
 	@sed -i 's%$(OPERATOR_IMAGE_PATH)%$(IMAGE_REPO)/$(OPERATOR_IMAGE_NAME):latest%' deploy/operator.yaml
 
