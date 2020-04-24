@@ -119,6 +119,17 @@ func (r *ReconcileTailoredProfile) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
+	// Make TailoredProfile be owned by the Profile it extends. This way
+	// we can ensure garbage collection happens.
+	// This update will trigger a requeue with the new object.
+	if !isOwnedBy(instance, p) {
+		if err := controllerutil.SetOwnerReference(p, instance, r.scheme); err != nil {
+			return reconcile.Result{}, err
+		}
+		err = r.client.Update(context.TODO(), instance)
+		return reconcile.Result{}, err
+	}
+
 	// Get tailored profile config map
 	tpcm := newTailoredProfileCM(instance)
 
@@ -192,4 +203,14 @@ func newTailoredProfileCM(tp *compliancev1alpha1.TailoredProfile) *corev1.Config
 			"tailoring.xml": "",
 		},
 	}
+}
+
+func isOwnedBy(obj, owner metav1.Object) bool {
+	refs := obj.GetOwnerReferences()
+	for _, ref := range refs {
+		if ref.UID == owner.GetUID() {
+			return true
+		}
+	}
+	return false
 }
