@@ -25,8 +25,8 @@ type TailoringElement struct {
 	XMLNamespaceURI string   `xml:"xmlns:xccdf,attr"`
 	ID              string   `xml:"id,attr"`
 	Benchmark       BenchmarkElement
-	// TODO(jaosorior): Add time attribute
-	// Time TimeElement
+	// TODO(jaosorior): Add version attribute
+	// Version versionElement
 	Profile ProfileElement
 	// TODO(jaosorior): Add signature capabilities
 	// Signature SignatureElement
