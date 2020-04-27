@@ -191,6 +191,7 @@ func (r *ReconcileTailoredProfile) updateTailoredProfileStatusReady(tp *complian
 		Name:      tpcm.Name,
 		Namespace: tpcm.Namespace,
 	}
+	tpCopy.Status.ID = xccdf.GetXCCDFProfileID(tp)
 	return r.client.Status().Update(context.TODO(), tpCopy)
 }
 
