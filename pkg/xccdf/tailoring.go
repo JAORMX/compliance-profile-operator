@@ -38,12 +38,17 @@ type BenchmarkElement struct {
 }
 
 type ProfileElement struct {
-	XMLName     xml.Name `xml:"xccdf-1.2:Profile"`
-	ID          string   `xml:"id,attr"`
-	Extends     string   `xml:"extends,attr"`
-	Title       string   `xml:"xccdf-1.2:title,omitempty"`
-	Description string   `xml:"xccdf-1.2:description,omitempty"`
+	XMLName     xml.Name                   `xml:"xccdf-1.2:Profile"`
+	ID          string                     `xml:"id,attr"`
+	Extends     string                     `xml:"extends,attr"`
+	Title       *TitleOrDescriptionElement `xml:"xccdf-1.2:title,omitempty"`
+	Description *TitleOrDescriptionElement `xml:"xccdf-1.2:description,omitempty"`
 	Selections  []SelectElement
+}
+
+type TitleOrDescriptionElement struct {
+	Override bool   `xml:"override,attr"`
+	Value    string `xml:",chardata"`
 }
 
 type SelectElement struct {
@@ -106,12 +111,22 @@ func TailoredProfileToXML(tp *cmpv1alpha1.TailoredProfile, p *cmpv1alpha1.Profil
 			Href: filepath.Join("/content", pb.Spec.ContentFile),
 		},
 		Profile: ProfileElement{
-			ID:          GetXCCDFProfileID(tp),
-			Extends:     p.ID,
-			Title:       tp.Spec.Title,
-			Description: tp.Spec.Description,
-			Selections:  getSelections(tp),
+			ID:         GetXCCDFProfileID(tp),
+			Extends:    p.ID,
+			Selections: getSelections(tp),
 		},
+	}
+	if tp.Spec.Title != "" {
+		tailoring.Profile.Title = &TitleOrDescriptionElement{
+			Override: true,
+			Value:    tp.Spec.Title,
+		}
+	}
+	if tp.Spec.Description != "" {
+		tailoring.Profile.Description = &TitleOrDescriptionElement{
+			Override: true,
+			Value:    tp.Spec.Description,
+		}
 	}
 
 	output, err := xml.MarshalIndent(tailoring, "", "  ")

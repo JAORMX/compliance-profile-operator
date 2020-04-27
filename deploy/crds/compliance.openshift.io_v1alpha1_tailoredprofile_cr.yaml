@@ -4,6 +4,7 @@ metadata:
   name: example-tailoredprofile
 spec:
   extends: example-profilebundle-moderate
+  title: My little profile
   disableRules:
     - name: file_permissions_node_config
       rationale: testing this
