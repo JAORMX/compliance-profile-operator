@@ -2,6 +2,7 @@ package xccdf
 
 import (
 	"encoding/xml"
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -13,12 +14,17 @@ const (
 	XMLHeader       string = `<?xml version="1.0" encoding="UTF-8"?>`
 	profileIDPrefix string = "xccdf_org.ssgproject.content_profile_"
 	ruleIDPrefix    string = "xccdf_org.ssgproject.content_rule_"
+	// XCCDFNamespace is the XCCDF namespace of this project. Per the XCCDF
+	// specification, this assiciates the content with the author
+	XCCDFNamespace string = "compliance.openshift.io"
+	XCCDFURI       string = "http://checklists.nist.gov/xccdf/1.2"
 )
 
 type TailoringElement struct {
-	XMLName   xml.Name `xml:"xccdf-1.2:Tailoring"`
-	ID        string   `xml:"id,attr"`
-	Benchmark BenchmarkElement
+	XMLName         xml.Name `xml:"xccdf-1.2:Tailoring"`
+	XMLNamespaceURI string   `xml:"xmlns:xccdf,attr"`
+	ID              string   `xml:"id,attr"`
+	Benchmark       BenchmarkElement
 	// TODO(jaosorior): Add time attribute
 	// Time TimeElement
 	Profile ProfileElement
@@ -48,7 +54,7 @@ type SelectElement struct {
 
 // GetXCCDFProfileID gets a profile xccdf ID from the TailoredProfile object
 func GetXCCDFProfileID(tp *cmpv1alpha1.TailoredProfile) string {
-	return profileIDPrefix + tp.Name
+	return fmt.Sprintf("xccdf_%s_profile_%s", XCCDFNamespace, tp.Name)
 }
 
 // GetXCCDFRuleID gets a rule xccdf ID from the rule name
@@ -64,6 +70,10 @@ func GetProfileNameFromID(id string) string {
 // GetRuleNameFromID gets a rule name from the xccdf ID
 func GetRuleNameFromID(id string) string {
 	return strings.TrimPrefix(id, ruleIDPrefix)
+}
+
+func getTailoringID(tp *cmpv1alpha1.TailoredProfile) string {
+	return fmt.Sprintf("xccdf_%s_tailoring_%s", XCCDFNamespace, tp.Name)
 }
 
 func getSelectElementFromCRRule(selection cmpv1alpha1.RuleReferenceSpec, enable bool) SelectElement {
@@ -88,7 +98,8 @@ func getSelections(tp *cmpv1alpha1.TailoredProfile) []SelectElement {
 // TailoredProfileToXML gets an XML string from a TailoredProfile and the corresponding Profile
 func TailoredProfileToXML(tp *cmpv1alpha1.TailoredProfile, p *cmpv1alpha1.Profile, pb *cmpv1alpha1.ProfileBundle) (string, error) {
 	tailoring := TailoringElement{
-		ID: "xccdf_scap-workbench_tailoring_default",
+		XMLNamespaceURI: XCCDFURI,
+		ID:              getTailoringID(tp),
 		Benchmark: BenchmarkElement{
 			// NOTE(jaosorior): Both this operator and the compliance-operator
 			// assume the content will be mounted on a "content/" directory
