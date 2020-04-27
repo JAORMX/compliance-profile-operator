@@ -164,6 +164,8 @@ TODO
   profileparser workload to be able to update the profiles so they're back to a
   good state.
 
+* Add `xml:lang` attributes to the XML fields.
+
 References
 ----------
 
