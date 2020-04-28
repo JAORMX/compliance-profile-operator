@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	cmpv1alpha1 "github.com/JAORMX/compliance-profile-operator/pkg/apis/compliance/v1alpha1"
 )
@@ -25,9 +26,8 @@ type TailoringElement struct {
 	XMLNamespaceURI string   `xml:"xmlns:xccdf-1.2,attr"`
 	ID              string   `xml:"id,attr"`
 	Benchmark       BenchmarkElement
-	// TODO(jaosorior): Add version attribute
-	// Version versionElement
-	Profile ProfileElement
+	Version         VersionElement
+	Profile         ProfileElement
 	// TODO(jaosorior): Add signature capabilities
 	// Signature SignatureElement
 }
@@ -35,6 +35,15 @@ type TailoringElement struct {
 type BenchmarkElement struct {
 	XMLName xml.Name `xml:"xccdf-1.2:benchmark"`
 	Href    string   `xml:"href,attr"`
+}
+
+type VersionElement struct {
+	XMLName xml.Name `xml:"xccdf-1.2:version"`
+	// FIXME(jaosorior): time.Time doesn't satisfy the unmarshalling
+	// interface needed by the XML library in golang. I used a string
+	// instead cause I was lazy.
+	Time  string `xml:"time,attr"`
+	Value string `xml:",chardata"`
 }
 
 type ProfileElement struct {
@@ -105,6 +114,11 @@ func TailoredProfileToXML(tp *cmpv1alpha1.TailoredProfile, p *cmpv1alpha1.Profil
 	tailoring := TailoringElement{
 		XMLNamespaceURI: XCCDFURI,
 		ID:              getTailoringID(tp),
+		Version: VersionElement{
+			Time: time.Now().Format(time.RFC3339),
+			// TODO(jaosorior): Establish a TailoredProfile versioning mechanism
+			Value: "1",
+		},
 		Benchmark: BenchmarkElement{
 			// NOTE(jaosorior): Both this operator and the compliance-operator
 			// assume the content will be mounted on a "content/" directory

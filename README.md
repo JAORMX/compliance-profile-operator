@@ -166,8 +166,6 @@ TODO
 
 * Add `xml:lang` attributes to the XML fields.
 
-* Add version element support (this is needed and is missing)
-
 * Refactor profileparser to be a subcommand of a main binary. This way we
   reduce the number of needed images.
 
