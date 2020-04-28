@@ -22,7 +22,7 @@ const (
 
 type TailoringElement struct {
 	XMLName         xml.Name `xml:"xccdf-1.2:Tailoring"`
-	XMLNamespaceURI string   `xml:"xmlns:xccdf,attr"`
+	XMLNamespaceURI string   `xml:"xmlns:xccdf-1.2,attr"`
 	ID              string   `xml:"id,attr"`
 	Benchmark       BenchmarkElement
 	// TODO(jaosorior): Add version attribute
