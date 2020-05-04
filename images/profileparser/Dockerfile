@@ -1,7 +1,5 @@
 # Step one: build compliance-operator
-FROM registry.access.redhat.com/ubi8/ubi-minimal as builder
-
-RUN microdnf install golang make
+FROM registry.access.redhat.com/ubi8/go-toolset as builder
 
 WORKDIR /go/src/github.com/JAORMX/compliance-profile-operator
 
