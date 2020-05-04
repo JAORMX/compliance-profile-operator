@@ -3,5 +3,5 @@ kind: ProfileBundle
 metadata:
   name: example-profilebundle
 spec:
-  contentImage: quay.io/jhrozek/ocp4-openscap-content:latest
+  contentImage: quay.io/complianceascode/ocp4:latest
   contentFile: ssg-ocp4-ds.xml
