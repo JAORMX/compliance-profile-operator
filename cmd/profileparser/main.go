@@ -239,7 +239,7 @@ func parseRulesAndDo(contentDom *xmldom.Document, pcfg *parserConfig, action fun
 		}
 		log.Info("Found rule", "id", id)
 
-		//description := ruleObj.FindOneByName("description")
+		description := ruleObj.FindOneByName("description")
 		rationale := ruleObj.FindOneByName("rationale")
 		warning := ruleObj.FindOneByName("warning")
 		severity := ruleObj.FindOneByName("severity")
@@ -288,9 +288,9 @@ func parseRulesAndDo(contentDom *xmldom.Document, pcfg *parserConfig, action fun
 			Title:          title.Text,
 			AvailableFixes: nil,
 		}
-		//if description != nil {
-		//	p.Description = description.Text
-		//}
+		if description != nil {
+			p.Description = description.Text
+		}
 		if rationale != nil {
 			p.Rationale = rationale.Text
 		}

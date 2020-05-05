@@ -171,9 +171,10 @@ TODO
 
 * Documennt Rule CRD
 
-* Enable Descriptions for Rules in profileparser
-
-* Fix warnings in Rules.
+* Fix `warnings` and `description` in Rules: The `.Text` attribute from the XML
+  object library does not give out all the output that's needed...so we only
+  get parts of what would should be the text. I'm unsure if this should be a
+  fix here or in the library that parses the XML.
 
 * Make Profile and TailoredProfiles use names of Rule objects instead of what
   they're using now.
