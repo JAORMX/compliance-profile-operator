@@ -114,7 +114,7 @@ func (r *ReconcileProfileBundle) Reconcile(request reconcile.Request) (reconcile
 		pbCopy.Status.DataStreamStatus = compliancev1alpha1.DataStreamPending
 		err = r.client.Status().Update(context.TODO(), pbCopy)
 		if err != nil {
-			fmt.Printf("Couldn't update ProfileBundle status: %v\n", err)
+			reqLogger.Error(err, "Couldn't update ProfileBundle status")
 			return reconcile.Result{}, err
 		}
 		reqLogger.Info("Creating a new Pod", "Pod.Namespace", pod.Namespace, "Pod.Name", pod.Name)
@@ -129,10 +129,22 @@ func (r *ReconcileProfileBundle) Reconcile(request reconcile.Request) (reconcile
 		return reconcile.Result{}, err
 	}
 
-	// Pod already exists - don't requeue
+	if podStartupError(found) {
+		// report to status
+		pbCopy := instance.DeepCopy()
+		pbCopy.Status.DataStreamStatus = compliancev1alpha1.DataStreamInvalid
+		pbCopy.Status.ErrorMessage = "The init container failed to start. Check Status.ContentImage."
+		err = r.client.Status().Update(context.TODO(), pbCopy)
+		if err != nil {
+			reqLogger.Error(err, "Couldn't update ProfileBundle status")
+			return reconcile.Result{}, err
+		}
+		// this was a fatal error, don't requeue
+		return reconcile.Result{}, nil
+	}
+
+	// Pod already exists and its init container at least ran - don't requeue
 	reqLogger.Info("Skip reconcile: Pod already exists", "Pod.Namespace", found.Namespace, "Pod.Name", found.Name)
-	// TODO(jaosorior): Detect if pod couldn't fetch the content image and update the
-	// profileBundle's status accordingly.
 	return reconcile.Result{}, nil
 }
 
@@ -198,4 +210,30 @@ func newPodForBundle(pb *compliancev1alpha1.ProfileBundle) *corev1.Pod {
 			},
 		},
 	}
+}
+
+// podStartupError returns false if for some reason the pod couldn't even
+// run. If there's more conditions in the function in the future, let's
+// split it
+func podStartupError(pod *corev1.Pod) bool {
+	// Check if the init container couldn't even run because the content image
+	// was wrong
+	for _, initStatus := range pod.Status.InitContainerStatuses {
+		if initStatus.Ready == true {
+			// in case there was a transient error before we reconciled,
+			// just shortcut the loop and return false
+			break
+		}
+
+		if initStatus.State.Waiting == nil {
+			continue
+		}
+
+		switch initStatus.State.Waiting.Reason {
+		case "ImagePullBackOff", "ErrImagePull":
+			return true
+		}
+	}
+
+	return false
 }
