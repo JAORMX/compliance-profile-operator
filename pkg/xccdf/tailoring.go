@@ -78,12 +78,14 @@ func GetXCCDFRuleID(selectionName string) string {
 
 // GetProfileNameFromID gets a profile name from the xccdf ID
 func GetProfileNameFromID(id string) string {
-	return strings.TrimPrefix(id, profileIDPrefix)
+	trimedName := strings.TrimPrefix(id, profileIDPrefix)
+	return strings.ToLower(strings.ReplaceAll(trimedName, "_", "-"))
 }
 
 // GetRuleNameFromID gets a rule name from the xccdf ID
 func GetRuleNameFromID(id string) string {
-	return strings.TrimPrefix(id, ruleIDPrefix)
+	trimedName := strings.TrimPrefix(id, ruleIDPrefix)
+	return strings.ToLower(strings.ReplaceAll(trimedName, "_", "-"))
 }
 
 func getTailoringID(tp *cmpv1alpha1.TailoredProfile) string {

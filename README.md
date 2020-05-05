@@ -169,6 +169,15 @@ TODO
 * Refactor profileparser to be a subcommand of a main binary. This way we
   reduce the number of needed images.
 
+* Documennt Rule CRD
+
+* Enable Descriptions for Rules in profileparser
+
+* Fix warnings in Rules.
+
+* Make Profile and TailoredProfiles use names of Rule objects instead of what
+  they're using now.
+
 References
 ----------
 

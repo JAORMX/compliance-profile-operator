@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	"github.com/operator-framework/operator-sdk/pkg/log/zap"
@@ -16,8 +17,10 @@ import (
 	"github.com/subchen/go-xmldom"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	runtimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -30,6 +33,11 @@ import (
 )
 
 var log = logf.Log.WithName("profileparser")
+
+const (
+	machineConfigFixType = "urn:xccdf:fix:script:ignition"
+	kubernetesFixType    = "urn:xccdf:fix:script:kubernetes"
+)
 
 type parserConfig struct {
 	dataStreamPath   string
@@ -97,6 +105,10 @@ func getK8sScheme() *k8sruntime.Scheme {
 	scheme.AddKnownTypes(cmpv1alpha1.SchemeGroupVersion,
 		&cmpv1alpha1.Profile{})
 	scheme.AddKnownTypes(cmpv1alpha1.SchemeGroupVersion,
+		&cmpv1alpha1.RuleList{})
+	scheme.AddKnownTypes(cmpv1alpha1.SchemeGroupVersion,
+		&cmpv1alpha1.Rule{})
+	scheme.AddKnownTypes(cmpv1alpha1.SchemeGroupVersion,
 		&metav1.CreateOptions{})
 	scheme.AddKnownTypes(cmpv1alpha1.SchemeGroupVersion,
 		&metav1.UpdateOptions{})
@@ -142,34 +154,29 @@ func readContent(filename string) (*os.File, error) {
 	return os.Open(cleanFileName)
 }
 
-func parseProfilesAndDo(dsReader io.Reader, pcfg *parserConfig, action func(p *cmpv1alpha1.Profile) error) error {
-	resultsDom, err := xmldom.Parse(dsReader)
-	if err != nil {
-		return err
-	}
-	profileObjs := resultsDom.Root.Query("//Profile")
+func logAndReturnError(errormsg string) error {
+	log.Info(errormsg)
+	return fmt.Errorf(errormsg)
+}
+
+func parseProfilesAndDo(contentDom *xmldom.Document, pcfg *parserConfig, action func(p *cmpv1alpha1.Profile) error) error {
+	profileObjs := contentDom.Root.Query("//Profile")
 	for _, profileObj := range profileObjs {
 		id := profileObj.GetAttributeValue("id")
 		if id == "" {
-			errormsg := "no id in profile"
-			log.Info(errormsg)
-			return fmt.Errorf(errormsg)
+			return logAndReturnError("no id in profile")
 		}
 		title := profileObj.FindOneByName("title")
 		if title == nil {
-			errormsg := "no title in profile"
-			log.Info(errormsg)
-			return fmt.Errorf(errormsg)
+			return logAndReturnError("no title in profile")
 		}
 		description := profileObj.FindOneByName("description")
 		if description == nil {
-			errormsg := "no description in profile"
-			log.Info(errormsg)
-			return fmt.Errorf(errormsg)
+			return logAndReturnError("no description in profile")
 		}
 		log.Info("Found profile", "id", id)
 
-		ruleObjs := profileObj.Query("//select")
+		ruleObjs := profileObj.FindByName("select")
 		selectedrules := []cmpv1alpha1.ProfileRule{}
 		for _, ruleObj := range ruleObjs {
 			idref := ruleObj.GetAttributeValue("idref")
@@ -184,7 +191,7 @@ func parseProfilesAndDo(dsReader io.Reader, pcfg *parserConfig, action func(p *c
 		}
 
 		selectedvalues := []cmpv1alpha1.ProfileValue{}
-		valueObjs := profileObj.Query("//set-value")
+		valueObjs := profileObj.FindByName("set-value")
 		for _, valueObj := range valueObjs {
 			idref := valueObj.GetAttributeValue("idref")
 			if idref == "" {
@@ -209,7 +216,7 @@ func parseProfilesAndDo(dsReader io.Reader, pcfg *parserConfig, action func(p *c
 			Rules:       selectedrules,
 			Values:      selectedvalues,
 		}
-		err = action(&p)
+		err := action(&p)
 		if err != nil {
 			log.Error(err, "couldn't execute action")
 			return err
@@ -219,8 +226,114 @@ func parseProfilesAndDo(dsReader io.Reader, pcfg *parserConfig, action func(p *c
 	return nil
 }
 
-func getPrefixedProfileName(pb *cmpv1alpha1.ProfileBundle, profileName string) string {
-	return pb.Name + "-" + profileName
+func parseRulesAndDo(contentDom *xmldom.Document, pcfg *parserConfig, action func(p *cmpv1alpha1.Rule) error) error {
+	ruleObjs := contentDom.Root.Query("//Rule")
+	for _, ruleObj := range ruleObjs {
+		id := ruleObj.GetAttributeValue("id")
+		if id == "" {
+			return logAndReturnError("no id in rule")
+		}
+		title := ruleObj.FindOneByName("title")
+		if title == nil {
+			return logAndReturnError("no title in rule")
+		}
+		log.Info("Found rule", "id", id)
+
+		//description := ruleObj.FindOneByName("description")
+		rationale := ruleObj.FindOneByName("rationale")
+		warning := ruleObj.FindOneByName("warning")
+		severity := ruleObj.FindOneByName("severity")
+
+		fixes := []cmpv1alpha1.FixDefinition{}
+		foundPlatformMap := make(map[string]bool)
+		fixNodeObjs := ruleObj.FindByName("fix")
+		for _, fixNodeObj := range fixNodeObjs {
+			if !isRelevantFix(fixNodeObj) {
+				continue
+			}
+			platform := fixNodeObj.GetAttributeValue("platform")
+			if foundPlatformMap[platform] {
+				// We already have a remediation for this platform
+				continue
+			}
+
+			rawFixReader := strings.NewReader(fixNodeObj.Text)
+			fixKubeObj, err := readObjFromYAML(rawFixReader)
+			if err != nil {
+				log.Info("Couldn't parse Kubernetes object from fix")
+				continue
+			}
+
+			disruption := fixNodeObj.GetAttributeValue("disruption")
+
+			newFix := cmpv1alpha1.FixDefinition{
+				Disruption: disruption,
+				Platform:   platform,
+				FixObject:  fixKubeObj,
+			}
+			fixes = append(fixes, newFix)
+			foundPlatformMap[platform] = true
+		}
+
+		p := cmpv1alpha1.Rule{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Rule",
+				APIVersion: cmpv1alpha1.SchemeGroupVersion.String(),
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      xccdf.GetRuleNameFromID(id),
+				Namespace: pcfg.profileBundleKey.Namespace,
+			},
+			ID:             id,
+			Title:          title.Text,
+			AvailableFixes: nil,
+		}
+		//if description != nil {
+		//	p.Description = description.Text
+		//}
+		if rationale != nil {
+			p.Rationale = rationale.Text
+		}
+		if warning != nil {
+			p.Warning = warning.Text
+		}
+		if severity != nil {
+			p.Severity = severity.Text
+		}
+		if len(fixes) > 0 {
+			p.AvailableFixes = fixes
+		}
+		err := action(&p)
+		if err != nil {
+			log.Error(err, "couldn't execute action for rule")
+			// We continue even if there's an error.
+		}
+	}
+
+	return nil
+}
+
+// Reads a YAML file and returns an unstructured object from it. This object
+// can be taken into use by the dynamic client
+func readObjFromYAML(r io.Reader) (*unstructured.Unstructured, error) {
+	obj := &unstructured.Unstructured{}
+	dec := k8syaml.NewYAMLToJSONDecoder(r)
+	err := dec.Decode(obj)
+	return obj, err
+}
+
+func isRelevantFix(fix *xmldom.Node) bool {
+	if fix.GetAttributeValue("system") == machineConfigFixType {
+		return true
+	}
+	if fix.GetAttributeValue("system") == kubernetesFixType {
+		return true
+	}
+	return false
+}
+
+func getPrefixedName(pb *cmpv1alpha1.ProfileBundle, objName string) string {
+	return pb.Name + "-" + objName
 }
 
 // updateProfileBundleStatus updates the status of the given ProfileBundle. If
@@ -267,24 +380,59 @@ func main() {
 	// #nosec
 	defer contentFile.Close()
 	bufContentFile := bufio.NewReader(contentFile)
+	contentDom, err := xmldom.Parse(bufContentFile)
+	if err != nil {
+		log.Error(err, "Couldn't read the content XML")
+		updateProfileBundleStatus(pcfg, pb, fmt.Errorf("Couldn't read content XML: %s", err))
+		os.Exit(1)
+	}
 
-	err = parseProfilesAndDo(bufContentFile, pcfg, func(p *cmpv1alpha1.Profile) error {
+	err = parseProfilesAndDo(contentDom, pcfg, func(p *cmpv1alpha1.Profile) error {
 		pCopy := p.DeepCopy()
 		profileName := pCopy.Name
 		// overwrite name
-		pCopy.SetName(getPrefixedProfileName(pb, profileName))
+		pCopy.SetName(getPrefixedName(pb, profileName))
 
 		if err := controllerutil.SetControllerReference(pb, pCopy, pcfg.scheme); err != nil {
 			return err
 		}
 
-		log.Info("Creating profile profile", "name", p.Name)
+		log.Info("Creating Profile", "Profile.name", p.Name)
 		err := pcfg.client.Create(context.TODO(), pCopy)
 		if err != nil {
 			if errors.IsAlreadyExists(err) {
-				log.Info("Profile already exists.", "name", p.Name)
+				log.Info("Profile already exists.", "Profile.Name", p.Name)
 			} else {
 				log.Error(err, "couldn't create profile")
+				return err
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		// The err variable might be nil, this is fine, it'll just update the status
+		// to valid
+		updateProfileBundleStatus(pcfg, pb, err)
+		return
+	}
+
+	err = parseRulesAndDo(contentDom, pcfg, func(r *cmpv1alpha1.Rule) error {
+		ruleName := r.Name
+		// overwrite name
+		r.SetName(getPrefixedName(pb, ruleName))
+
+		if err := controllerutil.SetControllerReference(pb, r, pcfg.scheme); err != nil {
+			return err
+		}
+
+		log.Info("Creating rule", "Rule.Name", r.Name)
+		err := pcfg.client.Create(context.TODO(), r)
+		if err != nil {
+			if errors.IsAlreadyExists(err) {
+				log.Info("Rule already exists.", "Rule.Name", r.Name)
+			} else {
+				log.Error(err, "couldn't create Rule")
 				return err
 			}
 		}
