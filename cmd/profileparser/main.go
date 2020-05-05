@@ -186,7 +186,8 @@ func parseProfilesAndDo(contentDom *xmldom.Document, pcfg *parserConfig, action 
 			}
 			selected := ruleObj.GetAttributeValue("selected")
 			if selected == "true" {
-				selectedrules = append(selectedrules, cmpv1alpha1.NewProfileRule(xccdf.GetRuleNameFromID(idref)))
+				ruleName := getPrefixedName(pcfg.profileBundleKey.Name, xccdf.GetRuleNameFromID(idref))
+				selectedrules = append(selectedrules, cmpv1alpha1.NewProfileRule(ruleName))
 			}
 		}
 
@@ -332,8 +333,8 @@ func isRelevantFix(fix *xmldom.Node) bool {
 	return false
 }
 
-func getPrefixedName(pb *cmpv1alpha1.ProfileBundle, objName string) string {
-	return pb.Name + "-" + objName
+func getPrefixedName(pbName, objName string) string {
+	return pbName + "-" + objName
 }
 
 // updateProfileBundleStatus updates the status of the given ProfileBundle. If
@@ -391,7 +392,7 @@ func main() {
 		pCopy := p.DeepCopy()
 		profileName := pCopy.Name
 		// overwrite name
-		pCopy.SetName(getPrefixedName(pb, profileName))
+		pCopy.SetName(getPrefixedName(pb.Name, profileName))
 
 		if err := controllerutil.SetControllerReference(pb, pCopy, pcfg.scheme); err != nil {
 			return err
@@ -420,7 +421,7 @@ func main() {
 	err = parseRulesAndDo(contentDom, pcfg, func(r *cmpv1alpha1.Rule) error {
 		ruleName := r.Name
 		// overwrite name
-		r.SetName(getPrefixedName(pb, ruleName))
+		r.SetName(getPrefixedName(pb.Name, ruleName))
 
 		if err := controllerutil.SetControllerReference(pb, r, pcfg.scheme); err != nil {
 			return err
