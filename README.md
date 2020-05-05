@@ -135,49 +135,6 @@ Where:
   the XML will be outputted as a ConfigMap. This ConfigMap will simply be the
   raw XML generated for the tailoring and can be taken into use directly.
 
-TODO
-----
-
-* Detect if the container image path is valid: We need to verify whether the
-  provided path is accessible, and if it isn't, persist that in the
-  **ProfileBundle**'s status (see
-  `pkg/controller/profilebundle/profilebundle_controller.go`)
-
-* Use dedicated service account for **profileparser**: Currently the
-  profile parser workload is using the same service account than the
-  operator. This is not ideal as we really want to use a service account with
-  less permissions. There already is a `profileparser` service account
-  available (from the `deploy/service_account.yaml` file), however, using it
-  causes an unknown issue in the workload. RBAC problems are suspected.
-
-* Implement **variables** in the **TailoredProfile** object.
-
-* Implement value specifications in the tailored profiles. Currently only
-  selections are handled.
-
-* Create default ProfileBundle(s) when the operator starts. This would be
-  useful in the sense that we would already have an OpenShift bundle and
-  profiles created from it as a default.
-
-* Make profile parser workload overwrite existing profiles. In cases where the
-  profile might have been modified locally, it would be good to get the
-  profileparser workload to be able to update the profiles so they're back to a
-  good state.
-
-* Add `xml:lang` attributes to the XML fields.
-
-* Refactor profileparser to be a subcommand of a main binary. This way we
-  reduce the number of needed images.
-
-* Documennt Rule CRD
-
-* Fix `warnings` and `description` in Rules: The `.Text` attribute from the XML
-  object library does not give out all the output that's needed...so we only
-  get parts of what would should be the text. I'm unsure if this should be a
-  fix here or in the library that parses the XML.
-
-* Make Profile and TailoredProfiles use names of Rule objects instead of what
-  they're using now.
 
 References
 ----------
