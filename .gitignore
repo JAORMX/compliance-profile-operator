@@ -12,6 +12,7 @@ build/_test
 auto-save-list
 tramp
 .\#*
+.lock
 # Org-mode
 .org-id-locations
 *_archive
