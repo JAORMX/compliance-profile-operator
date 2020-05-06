@@ -141,10 +141,24 @@ func (r *ReconcileTailoredProfile) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
+	rules, retriableErr, err := r.getRulesFromSelections(instance)
+	if err != nil {
+		if !retriableErr {
+			// Surface the error.
+			err = r.updateTailoredProfileStatusError(instance, err)
+			if err != nil {
+				// error udpating status - requeue
+				return reconcile.Result{}, err
+			}
+			return reconcile.Result{}, nil
+		}
+		return reconcile.Result{}, err
+	}
+
 	// Get tailored profile config map
 	tpcm := newTailoredProfileCM(instance)
 
-	tpcm.Data[tailoringFile], err = xccdf.TailoredProfileToXML(instance, p, pb)
+	tpcm.Data[tailoringFile], err = xccdf.TailoredProfileToXML(instance, p, pb, rules)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -181,6 +195,27 @@ func (r *ReconcileTailoredProfile) Reconcile(request reconcile.Request) (reconci
 	// ConfigMap already exists - don't requeue
 	reqLogger.Info("Skip reconcile: ConfigMap already exists", "ConfigMap.Namespace", found.Namespace, "ConfigMap.Name", found.Name)
 	return reconcile.Result{}, nil
+}
+
+func (r *ReconcileTailoredProfile) getRulesFromSelections(tp *compliancev1alpha1.TailoredProfile) (map[string]*compliancev1alpha1.Rule, bool, error) {
+	rules := make(map[string]*compliancev1alpha1.Rule)
+	for _, selection := range append(tp.Spec.EnableRules, tp.Spec.DisableRules...) {
+		_, ok := rules[selection.Name]
+		if ok {
+			return nil, false, fmt.Errorf("Rule '%s' appears twice in selections (enableRules or disableRules)", selection.Name)
+		}
+		rule := &compliancev1alpha1.Rule{}
+		ruleKey := types.NamespacedName{Name: selection.Name, Namespace: tp.Namespace}
+		err := r.client.Get(context.TODO(), ruleKey, rule)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return nil, false, err
+			}
+			return nil, true, err
+		}
+		rules[selection.Name] = rule
+	}
+	return rules, false, nil
 }
 
 func (r *ReconcileTailoredProfile) updateTailoredProfileStatusReady(tp *compliancev1alpha1.TailoredProfile, tpcm *corev1.ConfigMap) error {

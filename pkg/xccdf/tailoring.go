@@ -71,11 +71,6 @@ func GetXCCDFProfileID(tp *cmpv1alpha1.TailoredProfile) string {
 	return fmt.Sprintf("xccdf_%s_profile_%s", XCCDFNamespace, tp.Name)
 }
 
-// GetXCCDFRuleID gets a rule xccdf ID from the rule name
-func GetXCCDFRuleID(selectionName string) string {
-	return ruleIDPrefix + selectionName
-}
-
 // GetProfileNameFromID gets a profile name from the xccdf ID
 func GetProfileNameFromID(id string) string {
 	trimedName := strings.TrimPrefix(id, profileIDPrefix)
@@ -92,27 +87,29 @@ func getTailoringID(tp *cmpv1alpha1.TailoredProfile) string {
 	return fmt.Sprintf("xccdf_%s_tailoring_%s", XCCDFNamespace, tp.Name)
 }
 
-func getSelectElementFromCRRule(selection cmpv1alpha1.RuleReferenceSpec, enable bool) SelectElement {
+func getSelectElementFromCRRule(rule *cmpv1alpha1.Rule, enable bool) SelectElement {
 	return SelectElement{
-		IDRef:    GetXCCDFRuleID(selection.Name),
+		IDRef:    rule.ID,
 		Selected: enable,
 	}
 }
 
-func getSelections(tp *cmpv1alpha1.TailoredProfile) []SelectElement {
+func getSelections(tp *cmpv1alpha1.TailoredProfile, rules map[string]*cmpv1alpha1.Rule) []SelectElement {
 	selections := []SelectElement{}
 	for _, selection := range tp.Spec.EnableRules {
-		selections = append(selections, getSelectElementFromCRRule(selection, true))
+		rule := rules[selection.Name]
+		selections = append(selections, getSelectElementFromCRRule(rule, true))
 	}
 
 	for _, selection := range tp.Spec.DisableRules {
-		selections = append(selections, getSelectElementFromCRRule(selection, false))
+		rule := rules[selection.Name]
+		selections = append(selections, getSelectElementFromCRRule(rule, false))
 	}
 	return selections
 }
 
 // TailoredProfileToXML gets an XML string from a TailoredProfile and the corresponding Profile
-func TailoredProfileToXML(tp *cmpv1alpha1.TailoredProfile, p *cmpv1alpha1.Profile, pb *cmpv1alpha1.ProfileBundle) (string, error) {
+func TailoredProfileToXML(tp *cmpv1alpha1.TailoredProfile, p *cmpv1alpha1.Profile, pb *cmpv1alpha1.ProfileBundle, rules map[string]*cmpv1alpha1.Rule) (string, error) {
 	tailoring := TailoringElement{
 		XMLNamespaceURI: XCCDFURI,
 		ID:              getTailoringID(tp),
@@ -129,7 +126,7 @@ func TailoredProfileToXML(tp *cmpv1alpha1.TailoredProfile, p *cmpv1alpha1.Profil
 		Profile: ProfileElement{
 			ID:         GetXCCDFProfileID(tp),
 			Extends:    p.ID,
-			Selections: getSelections(tp),
+			Selections: getSelections(tp, rules),
 		},
 	}
 	if tp.Spec.Title != "" {

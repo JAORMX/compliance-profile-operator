@@ -3,22 +3,22 @@ kind: TailoredProfile
 metadata:
   name: example-tailoredprofile
 spec:
-  extends: example-profilebundle-moderate
+  extends: ocp4-moderate
   title: My little profile
   disableRules:
-    - name: file_permissions_node_config
+    - name: ocp4-file-permissions-node-config
+      rationale: This breaks X application.
+    - name: ocp4-account-disable-post-pw-expiration
       rationale: testing this
-    - name: account_disable_post_pw_expiration
+    - name: ocp4-accounts-no-uid-except-zero
       rationale: testing this
-    - name: accounts_no_uid_except_zero
+    - name: ocp4-audit-rules-dac-modification-chmod
       rationale: testing this
-    - name: audit_rules_dac_modification_chmod
+    - name: ocp4-audit-rules-dac-modification-chown
       rationale: testing this
-    - name: audit_rules_dac_modification_chown
+    - name: ocp4-audit-rules-dac-modification-fchmod
       rationale: testing this
-    - name: audit_rules_dac_modification_fchmod
+    - name: ocp4-audit-rules-dac-modification-fchmodat
       rationale: testing this
-    - name: audit_rules_dac_modification_fchmodat
-      rationale: testing this
-    - name: audit_rules_dac_modification_fchown
+    - name: ocp4-audit-rules-dac-modification-fchown
       rationale: testing this
