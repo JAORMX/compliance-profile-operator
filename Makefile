@@ -116,7 +116,7 @@ run: operator-sdk ## Run the compliance-profile-operator locally
 	WATCH_NAMESPACE=$(NAMESPACE) \
 	KUBERNETES_CONFIG=$(KUBECONFIG) \
 	OPERATOR_NAME=$(OPERATOR_NAME) \
-	$(GOPATH)/bin/operator-sdk run --local --namespace $(NAMESPACE)
+	$(GOPATH)/bin/operator-sdk run --local --watch-namespace $(NAMESPACE)
 
 .PHONY: clean
 clean: clean-modcache clean-cache clean-output ## Clean the golang environment
