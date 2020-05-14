@@ -5,6 +5,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/JAORMX/compliance-profile-operator/pkg/profileparser"
 	"io"
 	"os"
 	"path/filepath"
@@ -19,7 +20,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	runtimeclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -39,13 +39,6 @@ const (
 	kubernetesFixType    = "urn:xccdf:fix:script:kubernetes"
 )
 
-type parserConfig struct {
-	dataStreamPath   string
-	profileBundleKey types.NamespacedName
-	client           runtimeclient.Client
-	scheme           *k8sruntime.Scheme
-}
-
 // XMLDocument is a wrapper that keeps the interface XML-parser-agnostic
 type XMLDocument struct {
 	*xmldom.Document
@@ -64,8 +57,8 @@ func assertNotEmpty(param, paramName string) {
 	}
 }
 
-func newParserConfig() *parserConfig {
-	pcfg := parserConfig{}
+func newParserConfig() *profileparser.ParserConfig {
+	pcfg := profileparser.ParserConfig{}
 
 	// Add the zap logger flag set to the CLI. The flag set must
 	// be added before calling pflag.Parse().
@@ -75,9 +68,9 @@ func newParserConfig() *parserConfig {
 	// controller-runtime)
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 
-	pflag.StringVar(&pcfg.dataStreamPath, "ds-path", "/content/ssg-ocp4-ds.xml", "Path to the datastream xml file")
-	pflag.StringVar(&pcfg.profileBundleKey.Name, "profile-bundle-name", "", "Name of the ProfileBundle object")
-	pflag.StringVar(&pcfg.profileBundleKey.Namespace, "profile-bundle-namespace", "", "Namespace of the ProfileBundle object")
+	pflag.StringVar(&pcfg.DataStreamPath, "ds-path", "/content/ssg-ocp4-ds.xml", "Path to the datastream xml file")
+	pflag.StringVar(&pcfg.ProfileBundleKey.Name, "profile-bundle-name", "", "Name of the ProfileBundle object")
+	pflag.StringVar(&pcfg.ProfileBundleKey.Namespace, "profile-bundle-namespace", "", "Namespace of the ProfileBundle object")
 
 	pflag.Parse()
 
@@ -85,11 +78,11 @@ func newParserConfig() *parserConfig {
 
 	printVersion()
 
-	assertNotEmpty(pcfg.profileBundleKey.Name, "profile-bundle-name")
-	assertNotEmpty(pcfg.profileBundleKey.Namespace, "profile-bundle-namespace")
+	assertNotEmpty(pcfg.ProfileBundleKey.Name, "profile-bundle-name")
+	assertNotEmpty(pcfg.ProfileBundleKey.Namespace, "profile-bundle-namespace")
 
-	pcfg.scheme = getK8sScheme()
-	pcfg.client = getK8sClient(pcfg.scheme)
+	pcfg.Scheme = getK8sScheme()
+	pcfg.Client = getK8sClient(pcfg.Scheme)
 
 	return &pcfg
 }
@@ -108,6 +101,10 @@ func getK8sScheme() *k8sruntime.Scheme {
 		&cmpv1alpha1.RuleList{})
 	scheme.AddKnownTypes(cmpv1alpha1.SchemeGroupVersion,
 		&cmpv1alpha1.Rule{})
+	scheme.AddKnownTypes(cmpv1alpha1.SchemeGroupVersion,
+		&cmpv1alpha1.VariableList{})
+	scheme.AddKnownTypes(cmpv1alpha1.SchemeGroupVersion,
+		&cmpv1alpha1.Variable{})
 	scheme.AddKnownTypes(cmpv1alpha1.SchemeGroupVersion,
 		&metav1.CreateOptions{})
 	scheme.AddKnownTypes(cmpv1alpha1.SchemeGroupVersion,
@@ -134,10 +131,10 @@ func getK8sClient(scheme *k8sruntime.Scheme) runtimeclient.Client {
 	return client
 }
 
-func getProfileBundle(pcfg *parserConfig) (*cmpv1alpha1.ProfileBundle, error) {
+func getProfileBundle(pcfg *profileparser.ParserConfig) (*cmpv1alpha1.ProfileBundle, error) {
 	pb := cmpv1alpha1.ProfileBundle{}
 
-	err := pcfg.client.Get(context.TODO(), pcfg.profileBundleKey, &pb)
+	err := pcfg.Client.Get(context.TODO(), pcfg.ProfileBundleKey, &pb)
 	if err != nil {
 		log.Error(err, "")
 		os.Exit(1)
@@ -154,25 +151,20 @@ func readContent(filename string) (*os.File, error) {
 	return os.Open(cleanFileName)
 }
 
-func logAndReturnError(errormsg string) error {
-	log.Info(errormsg)
-	return fmt.Errorf(errormsg)
-}
-
-func parseProfilesAndDo(contentDom *xmldom.Document, pcfg *parserConfig, action func(p *cmpv1alpha1.Profile) error) error {
+func parseProfilesAndDo(contentDom *xmldom.Document, pcfg *profileparser.ParserConfig, action func(p *cmpv1alpha1.Profile) error) error {
 	profileObjs := contentDom.Root.Query("//Profile")
 	for _, profileObj := range profileObjs {
 		id := profileObj.GetAttributeValue("id")
 		if id == "" {
-			return logAndReturnError("no id in profile")
+			return profileparser.LogAndReturnError("no id in profile")
 		}
 		title := profileObj.FindOneByName("title")
 		if title == nil {
-			return logAndReturnError("no title in profile")
+			return profileparser.LogAndReturnError("no title in profile")
 		}
 		description := profileObj.FindOneByName("description")
 		if description == nil {
-			return logAndReturnError("no description in profile")
+			return profileparser.LogAndReturnError("no description in profile")
 		}
 		log.Info("Found profile", "id", id)
 
@@ -186,7 +178,7 @@ func parseProfilesAndDo(contentDom *xmldom.Document, pcfg *parserConfig, action 
 			}
 			selected := ruleObj.GetAttributeValue("selected")
 			if selected == "true" {
-				ruleName := getPrefixedName(pcfg.profileBundleKey.Name, xccdf.GetRuleNameFromID(idref))
+				ruleName := getPrefixedName(pcfg.ProfileBundleKey.Name, xccdf.GetRuleNameFromID(idref))
 				selectedrules = append(selectedrules, cmpv1alpha1.NewProfileRule(ruleName))
 			}
 		}
@@ -209,7 +201,7 @@ func parseProfilesAndDo(contentDom *xmldom.Document, pcfg *parserConfig, action 
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      xccdf.GetProfileNameFromID(id),
-				Namespace: pcfg.profileBundleKey.Namespace,
+				Namespace: pcfg.ProfileBundleKey.Namespace,
 			},
 			ID:          id,
 			Title:       title.Text,
@@ -227,16 +219,16 @@ func parseProfilesAndDo(contentDom *xmldom.Document, pcfg *parserConfig, action 
 	return nil
 }
 
-func parseRulesAndDo(contentDom *xmldom.Document, pcfg *parserConfig, action func(p *cmpv1alpha1.Rule) error) error {
+func parseRulesAndDo(contentDom *xmldom.Document, pcfg *profileparser.ParserConfig, action func(p *cmpv1alpha1.Rule) error) error {
 	ruleObjs := contentDom.Root.Query("//Rule")
 	for _, ruleObj := range ruleObjs {
 		id := ruleObj.GetAttributeValue("id")
 		if id == "" {
-			return logAndReturnError("no id in rule")
+			return profileparser.LogAndReturnError("no id in rule")
 		}
 		title := ruleObj.FindOneByName("title")
 		if title == nil {
-			return logAndReturnError("no title in rule")
+			return profileparser.LogAndReturnError("no title in rule")
 		}
 		log.Info("Found rule", "id", id)
 
@@ -283,7 +275,7 @@ func parseRulesAndDo(contentDom *xmldom.Document, pcfg *parserConfig, action fun
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      xccdf.GetRuleNameFromID(id),
-				Namespace: pcfg.profileBundleKey.Namespace,
+				Namespace: pcfg.ProfileBundleKey.Namespace,
 			},
 			ID:             id,
 			Title:          title.Text,
@@ -339,13 +331,13 @@ func getPrefixedName(pbName, objName string) string {
 
 // updateProfileBundleStatus updates the status of the given ProfileBundle. If
 // the given error is nil, the status will be valid, else it'll be invalid
-func updateProfileBundleStatus(pcfg *parserConfig, pb *cmpv1alpha1.ProfileBundle, err error) {
+func updateProfileBundleStatus(pcfg *profileparser.ParserConfig, pb *cmpv1alpha1.ProfileBundle, err error) {
 	if err != nil {
 		// Never update a fetched object, always just a copy
 		pbCopy := pb.DeepCopy()
 		pbCopy.Status.DataStreamStatus = cmpv1alpha1.DataStreamInvalid
 		pbCopy.Status.ErrorMessage = err.Error()
-		err = pcfg.client.Status().Update(context.TODO(), pbCopy)
+		err = pcfg.Client.Status().Update(context.TODO(), pbCopy)
 		if err != nil {
 			log.Error(err, "Couldn't update ProfileBundle status")
 			os.Exit(1)
@@ -354,7 +346,7 @@ func updateProfileBundleStatus(pcfg *parserConfig, pb *cmpv1alpha1.ProfileBundle
 		// Never update a fetched object, always just a copy
 		pbCopy := pb.DeepCopy()
 		pbCopy.Status.DataStreamStatus = cmpv1alpha1.DataStreamValid
-		err = pcfg.client.Status().Update(context.TODO(), pbCopy)
+		err = pcfg.Client.Status().Update(context.TODO(), pbCopy)
 		if err != nil {
 			log.Error(err, "Couldn't update ProfileBundle status")
 			os.Exit(1)
@@ -372,7 +364,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	contentFile, err := readContent(pcfg.dataStreamPath)
+	contentFile, err := readContent(pcfg.DataStreamPath)
 	if err != nil {
 		log.Error(err, "Couldn't read the content")
 		updateProfileBundleStatus(pcfg, pb, fmt.Errorf("Couldn't read content file: %s", err))
@@ -394,12 +386,12 @@ func main() {
 		// overwrite name
 		pCopy.SetName(getPrefixedName(pb.Name, profileName))
 
-		if err := controllerutil.SetControllerReference(pb, pCopy, pcfg.scheme); err != nil {
+		if err := controllerutil.SetControllerReference(pb, pCopy, pcfg.Scheme); err != nil {
 			return err
 		}
 
 		log.Info("Creating Profile", "Profile.name", p.Name)
-		err := pcfg.client.Create(context.TODO(), pCopy)
+		err := pcfg.Client.Create(context.TODO(), pCopy)
 		if err != nil {
 			if errors.IsAlreadyExists(err) {
 				log.Info("Profile already exists.", "Profile.Name", p.Name)
@@ -412,8 +404,6 @@ func main() {
 	})
 
 	if err != nil {
-		// The err variable might be nil, this is fine, it'll just update the status
-		// to valid
 		updateProfileBundleStatus(pcfg, pb, err)
 		return
 	}
@@ -423,17 +413,44 @@ func main() {
 		// overwrite name
 		r.SetName(getPrefixedName(pb.Name, ruleName))
 
-		if err := controllerutil.SetControllerReference(pb, r, pcfg.scheme); err != nil {
+		if err := controllerutil.SetControllerReference(pb, r, pcfg.Scheme); err != nil {
 			return err
 		}
 
 		log.Info("Creating rule", "Rule.Name", r.Name)
-		err := pcfg.client.Create(context.TODO(), r)
+		err := pcfg.Client.Create(context.TODO(), r)
 		if err != nil {
 			if errors.IsAlreadyExists(err) {
 				log.Info("Rule already exists.", "Rule.Name", r.Name)
 			} else {
 				log.Error(err, "couldn't create Rule")
+				return err
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		updateProfileBundleStatus(pcfg, pb, err)
+		return
+	}
+
+	err = profileparser.ParseVariablesAndDo(contentDom, pcfg, func(v *cmpv1alpha1.Variable) error {
+		varName := v.Name
+		// overwrite name
+		v.SetName(getPrefixedName(pb.Name, varName))
+
+		if err := controllerutil.SetControllerReference(pb, v, pcfg.Scheme); err != nil {
+			return err
+		}
+
+		log.Info("Creating variable", "Variable.Name", v.Name)
+		err := pcfg.Client.Create(context.TODO(), v)
+		if err != nil {
+			if errors.IsAlreadyExists(err) {
+				log.Info("Variable already exists.", "Variable.Name", v.Name)
+			} else {
+				log.Error(err, "couldn't create Variable")
 				return err
 			}
 		}

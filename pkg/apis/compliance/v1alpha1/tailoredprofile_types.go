@@ -4,12 +4,24 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// FIXME: move name/rationale to a common struct with an interface?
+
 // RuleReferenceSpec specifies a rule to be selected/deselected, as well as the reason why
 type RuleReferenceSpec struct {
 	// Name of the rule that's being referenced
 	Name string `json:"name"`
 	// Rationale of why this rule is being selected/deselected
 	Rationale string `json:"rationale"`
+}
+
+// ValueReferenceSpec specifies a value to be set for a variable with a reason why
+type VariableValueSpec struct {
+	// Name of the variable that's being referenced
+	Name string `json:"name"`
+	// Rationale of why this value is being tailored
+	Rationale string `json:"rationale"`
+	// Rationale of why this value is being tailored
+	Value string `json:"value"`
 }
 
 // TailoredProfileSpec defines the desired state of TailoredProfile
@@ -28,6 +40,10 @@ type TailoredProfileSpec struct {
 	// +optional
 	// +nullable
 	DisableRules []RuleReferenceSpec `json:"disableRules,omitempty"`
+	// Sets the referenced variables to selected values
+	// +optional
+	// +nullable
+	SetValues []VariableValueSpec `json:"setValues,omitempty"`
 }
 
 // TailoredProfileState defines the state fo the tailored profile
