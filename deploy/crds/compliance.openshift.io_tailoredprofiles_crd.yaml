@@ -78,6 +78,10 @@ spec:
             extends:
               description: Points to the name of the profile to extend
               type: string
+            outputType:
+              description: Defines the type of output that the tailored profile will
+                do.
+              type: string
             setValues:
               description: Sets the referenced variables to selected values
               items:
@@ -114,11 +118,9 @@ spec:
             id:
               description: The XCCDF ID of the tailored profile
               type: string
-            state:
-              description: The current state of the tailored profile
-              type: string
-            tailoringConfigMap:
-              description: Points to the generated configMap with the tailoring
+            outputRef:
+              description: Points to the generated resource of the type specified
+                in "outputType"
               properties:
                 name:
                   type: string
@@ -128,6 +130,9 @@ spec:
               - name
               - namespace
               type: object
+            state:
+              description: The current state of the tailored profile
+              type: string
           type: object
       type: object
   version: v1alpha1

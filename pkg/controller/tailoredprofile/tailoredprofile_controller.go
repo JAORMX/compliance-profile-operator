@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/JAORMX/compliance-profile-operator/pkg/xccdf"
+	"github.com/go-logr/logr"
 
 	compliancev1alpha1 "github.com/JAORMX/compliance-profile-operator/pkg/apis/compliance/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -98,14 +99,8 @@ func (r *ReconcileTailoredProfile) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
-	// Validate TailoredProfile
-	if instance.Spec.Extends == "" {
-		err = r.updateTailoredProfileStatusError(instance, fmt.Errorf(".spec.extends can't be empty"))
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-		// don't return an error in the reconciler. The error will surface via the CR's status
-		return reconcile.Result{}, nil
+	if canContinue, err := r.validateTailoredProfile(instance); !canContinue {
+		return reconcile.Result{}, err
 	}
 
 	// Get the Profile being extended
@@ -182,33 +177,42 @@ func (r *ReconcileTailoredProfile) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
-	// Check if this ConfigMap already exists
-	found := &corev1.ConfigMap{}
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: tpcm.Name, Namespace: tpcm.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-		// update status
-		err = r.updateTailoredProfileStatusReady(instance, tpcm)
-		if err != nil {
-			fmt.Printf("Couldn't update TailoredProfile status: %v\n", err)
-			return reconcile.Result{}, err
-		}
+	return r.ensureOutputObject(instance, tpcm, reqLogger)
+}
 
-		// create CM
-		reqLogger.Info("Creating a new ConfigMap", "ConfigMap.Namespace", tpcm.Namespace, "ConfigMap.Name", tpcm.Name)
-		err = r.client.Create(context.TODO(), tpcm)
+// validates the given TailoredProfile. true means that we can continue since the
+// tailored profile is valid, false means that we can't.
+func (r *ReconcileTailoredProfile) validateTailoredProfile(tp *compliancev1alpha1.TailoredProfile) (bool, error) {
+	// Validate TailoredProfile
+	if tp.Spec.Extends == "" {
+		err := r.updateTailoredProfileStatusError(tp, fmt.Errorf(".spec.extends can't be empty"))
 		if err != nil {
-			return reconcile.Result{}, err
+			return false, err
 		}
-
-		// ConfigMap created successfully - don't requeue
-		return reconcile.Result{}, nil
-	} else if err != nil {
-		return reconcile.Result{}, err
+		// don't return an error in the reconciler. The error will surface via the CR's status
+		return false, nil
 	}
 
-	// ConfigMap already exists - don't requeue
-	reqLogger.Info("Skip reconcile: ConfigMap already exists", "ConfigMap.Namespace", found.Namespace, "ConfigMap.Name", found.Name)
-	return reconcile.Result{}, nil
+	switch tp.Spec.OutputType {
+	case compliancev1alpha1.ConfigMapOutput: // Do nothing, we're good
+	case "":
+		tpCopy := tp.DeepCopy()
+		tpCopy.Spec.OutputType = compliancev1alpha1.ConfigMapOutput
+		// Update, which will requeue
+		return false, r.client.Update(context.TODO(), tpCopy)
+	default:
+		err := r.updateTailoredProfileStatusError(
+			tp,
+			fmt.Errorf(".spec.outputType is invalid (accepted values: ConfigMap"),
+		)
+		if err != nil {
+			return false, err
+		}
+		// don't return an error in the reconciler. The error will surface via the CR's status
+		return false, nil
+	}
+
+	return true, nil
 }
 
 func (r *ReconcileTailoredProfile) getRulesFromSelections(tp *compliancev1alpha1.TailoredProfile) (map[string]*compliancev1alpha1.Rule, bool, error) {
@@ -260,7 +264,7 @@ func (r *ReconcileTailoredProfile) updateTailoredProfileStatusReady(tp *complian
 	// Never update the original (update the copy)
 	tpCopy := tp.DeepCopy()
 	tpCopy.Status.State = compliancev1alpha1.TailoredProfileStateReady
-	tpCopy.Status.TailoringConfigMap = compliancev1alpha1.TailoringConfigMapRef{
+	tpCopy.Status.OutputRef = compliancev1alpha1.OutputRef{
 		Name:      tpcm.Name,
 		Namespace: tpcm.Namespace,
 	}
@@ -287,6 +291,46 @@ func (r *ReconcileTailoredProfile) getProfileBundleFromProfile(p *compliancev1al
 	// in order for OwnerReferences to work
 	err = r.client.Get(context.TODO(), types.NamespacedName{Name: pbRef.Name, Namespace: p.Namespace}, &pb)
 	return &pb, err
+}
+
+func (r *ReconcileTailoredProfile) ensureOutputObject(tp *compliancev1alpha1.TailoredProfile, cm *corev1.ConfigMap, logger logr.Logger) (reconcile.Result, error) {
+	switch tp.Spec.OutputType {
+	case compliancev1alpha1.ConfigMapOutput: // Do nothing, we're good
+		return r.ensureConfigMapOutputObject(tp, cm, logger)
+	default:
+		logger.Info("WARNING: unkown output type. We shouldn't get here as this should have been validated already")
+	}
+	return reconcile.Result{}, nil
+}
+
+func (r *ReconcileTailoredProfile) ensureConfigMapOutputObject(tp *compliancev1alpha1.TailoredProfile, tpcm *corev1.ConfigMap, logger logr.Logger) (reconcile.Result, error) {
+	// Check if this ConfigMap already exists
+	found := &corev1.ConfigMap{}
+	err := r.client.Get(context.TODO(), types.NamespacedName{Name: tpcm.Name, Namespace: tpcm.Namespace}, found)
+	if err != nil && errors.IsNotFound(err) {
+		// update status
+		err = r.updateTailoredProfileStatusReady(tp, tpcm)
+		if err != nil {
+			fmt.Printf("Couldn't update TailoredProfile status: %v\n", err)
+			return reconcile.Result{}, err
+		}
+
+		// create CM
+		logger.Info("Creating a new ConfigMap", "ConfigMap.Namespace", tpcm.Namespace, "ConfigMap.Name", tpcm.Name)
+		err = r.client.Create(context.TODO(), tpcm)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+
+		// ConfigMap created successfully - don't requeue
+		return reconcile.Result{}, nil
+	} else if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	// ConfigMap already exists - don't requeue
+	logger.Info("Skip reconcile: ConfigMap already exists", "ConfigMap.Namespace", found.Namespace, "ConfigMap.Name", found.Name)
+	return reconcile.Result{}, nil
 }
 
 func getProfileBundleReferenceFromProfile(p *compliancev1alpha1.Profile) (*metav1.OwnerReference, error) {

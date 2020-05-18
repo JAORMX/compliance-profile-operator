@@ -20,7 +20,7 @@ spec:
             internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
           type: string
         description:
-          description: The description of the Rule
+          description: The description of the Variable
           type: string
         id:
           description: the ID of the variable
@@ -33,7 +33,7 @@ spec:
         metadata:
           type: object
         selections:
-          description: Enumerates what values are allowed for this values. Can be
+          description: Enumerates what values are allowed for this variable. Can be
             empty.
           items:
             properties:
@@ -47,7 +47,7 @@ spec:
           nullable: true
           type: array
         title:
-          description: The title of the Rule
+          description: The title of the Variable
           type: string
         type:
           description: The type of the variable
