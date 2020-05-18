@@ -412,6 +412,10 @@ func main() {
 		ruleName := r.Name
 		// overwrite name
 		r.SetName(getPrefixedName(pb.Name, ruleName))
+		if r.GetLabels() == nil {
+			r.Labels = make(map[string]string)
+		}
+		r.Labels[cmpv1alpha1.RuleIDLabelKey] = ruleName
 
 		if err := controllerutil.SetControllerReference(pb, r, pcfg.Scheme); err != nil {
 			return err
