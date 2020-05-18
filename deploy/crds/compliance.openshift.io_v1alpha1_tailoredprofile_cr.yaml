@@ -22,3 +22,7 @@ spec:
       rationale: testing this
     - name: ocp4-audit-rules-dac-modification-fchown
       rationale: testing this
+  setValues:
+    - name: ocp4-var-selinux-state
+      rationale: trolling dwalsh
+      value: permissive

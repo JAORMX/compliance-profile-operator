@@ -15,6 +15,7 @@ const (
 	XMLHeader       string = `<?xml version="1.0" encoding="UTF-8"?>`
 	profileIDPrefix string = "xccdf_org.ssgproject.content_profile_"
 	ruleIDPrefix    string = "xccdf_org.ssgproject.content_rule_"
+	varIDPrefix     string = "xccdf_org.ssgproject.content_value_"
 	// XCCDFNamespace is the XCCDF namespace of this project. Per the XCCDF
 	// specification, this assiciates the content with the author
 	XCCDFNamespace string = "compliance.openshift.io"
@@ -53,6 +54,7 @@ type ProfileElement struct {
 	Title       *TitleOrDescriptionElement `xml:"xccdf-1.2:title,omitempty"`
 	Description *TitleOrDescriptionElement `xml:"xccdf-1.2:description,omitempty"`
 	Selections  []SelectElement
+	Values      []SetValueElement
 }
 
 type TitleOrDescriptionElement struct {
@@ -64,6 +66,12 @@ type SelectElement struct {
 	XMLName  xml.Name `xml:"xccdf-1.2:select"`
 	IDRef    string   `xml:"idref,attr"`
 	Selected bool     `xml:"selected,attr"`
+}
+
+type SetValueElement struct {
+	XMLName xml.Name `xml:"xccdf-1.2:set-value"`
+	IDRef   string   `xml:"idref,attr"`
+	Value   string   `xml:",chardata"`
 }
 
 // GetXCCDFProfileID gets a profile xccdf ID from the TailoredProfile object
@@ -80,6 +88,11 @@ func GetProfileNameFromID(id string) string {
 // GetRuleNameFromID gets a rule name from the xccdf ID
 func GetRuleNameFromID(id string) string {
 	trimedName := strings.TrimPrefix(id, ruleIDPrefix)
+	return strings.ToLower(strings.ReplaceAll(trimedName, "_", "-"))
+}
+
+func GetVariableNameFromID(id string) string {
+	trimedName := strings.TrimPrefix(id, varIDPrefix)
 	return strings.ToLower(strings.ReplaceAll(trimedName, "_", "-"))
 }
 
@@ -108,8 +121,21 @@ func getSelections(tp *cmpv1alpha1.TailoredProfile, rules map[string]*cmpv1alpha
 	return selections
 }
 
+func getValuesFromVariables(variables []*cmpv1alpha1.Variable) []SetValueElement {
+	values := []SetValueElement{}
+
+	for _, varObj := range variables {
+		values = append(values, SetValueElement{
+			IDRef: varObj.ID,
+			Value: varObj.Value,
+		})
+	}
+
+	return values
+}
+
 // TailoredProfileToXML gets an XML string from a TailoredProfile and the corresponding Profile
-func TailoredProfileToXML(tp *cmpv1alpha1.TailoredProfile, p *cmpv1alpha1.Profile, pb *cmpv1alpha1.ProfileBundle, rules map[string]*cmpv1alpha1.Rule) (string, error) {
+func TailoredProfileToXML(tp *cmpv1alpha1.TailoredProfile, p *cmpv1alpha1.Profile, pb *cmpv1alpha1.ProfileBundle, rules map[string]*cmpv1alpha1.Rule, variables []*cmpv1alpha1.Variable) (string, error) {
 	tailoring := TailoringElement{
 		XMLNamespaceURI: XCCDFURI,
 		ID:              getTailoringID(tp),
@@ -127,6 +153,7 @@ func TailoredProfileToXML(tp *cmpv1alpha1.TailoredProfile, p *cmpv1alpha1.Profil
 			ID:         GetXCCDFProfileID(tp),
 			Extends:    p.ID,
 			Selections: getSelections(tp, rules),
+			Values:     getValuesFromVariables(variables),
 		},
 	}
 	if tp.Spec.Title != "" {

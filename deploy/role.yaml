@@ -73,6 +73,7 @@ rules:
   - profiles
   - tailoredprofiles
   - rules
+  - variables
   verbs:
   - create
   - delete

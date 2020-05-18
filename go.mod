@@ -3,6 +3,8 @@ module github.com/JAORMX/compliance-profile-operator
 go 1.13
 
 require (
+	github.com/onsi/ginkgo v1.12.0
+	github.com/onsi/gomega v1.9.0
 	github.com/operator-framework/operator-sdk v0.17.1-0.20200421202908-c5877e2019ca
 	github.com/securego/gosec v0.0.0-20200401082031-e946c8c39989
 	github.com/spf13/pflag v1.0.5

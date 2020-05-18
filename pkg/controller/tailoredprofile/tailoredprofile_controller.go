@@ -155,10 +155,24 @@ func (r *ReconcileTailoredProfile) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
+	variables, retriableErr, err := r.getVariablesFromSelections(instance)
+	if err != nil {
+		if !retriableErr {
+			// Surface the error.
+			err = r.updateTailoredProfileStatusError(instance, err)
+			if err != nil {
+				// error udpating status - requeue
+				return reconcile.Result{}, err
+			}
+			return reconcile.Result{}, nil
+		}
+		return reconcile.Result{}, err
+	}
+
 	// Get tailored profile config map
 	tpcm := newTailoredProfileCM(instance)
 
-	tpcm.Data[tailoringFile], err = xccdf.TailoredProfileToXML(instance, p, pb, rules)
+	tpcm.Data[tailoringFile], err = xccdf.TailoredProfileToXML(instance, p, pb, rules, variables)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -216,6 +230,30 @@ func (r *ReconcileTailoredProfile) getRulesFromSelections(tp *compliancev1alpha1
 		rules[selection.Name] = rule
 	}
 	return rules, false, nil
+}
+
+func (r *ReconcileTailoredProfile) getVariablesFromSelections(tp *compliancev1alpha1.TailoredProfile) ([]*compliancev1alpha1.Variable, bool, error) {
+	variableList := []*compliancev1alpha1.Variable{}
+	for _, setValues := range tp.Spec.SetValues {
+		variable := &compliancev1alpha1.Variable{}
+		varKey := types.NamespacedName{Name: setValues.Name, Namespace: tp.Namespace}
+		err := r.client.Get(context.TODO(), varKey, variable)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return nil, false, err
+			}
+			return nil, true, err
+		}
+
+		// try setting the variable, this also validates the value
+		err = variable.SetValue(setValues.Value)
+		if err != nil {
+			return nil, false, err
+		}
+
+		variableList = append(variableList, variable)
+	}
+	return variableList, false, nil
 }
 
 func (r *ReconcileTailoredProfile) updateTailoredProfileStatusReady(tp *compliancev1alpha1.TailoredProfile, tpcm *corev1.ConfigMap) error {
