@@ -82,3 +82,14 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - "policy.mcm.ibm.com"
+  resources:
+  - policies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch

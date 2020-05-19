@@ -5,12 +5,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/JAORMX/compliance-profile-operator/pkg/profileparser"
 	"io"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/JAORMX/compliance-profile-operator/pkg/profileparser"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	"github.com/operator-framework/operator-sdk/pkg/log/zap"
@@ -412,10 +413,10 @@ func main() {
 		ruleName := r.Name
 		// overwrite name
 		r.SetName(getPrefixedName(pb.Name, ruleName))
-		if r.GetLabels() == nil {
-			r.Labels = make(map[string]string)
+		if r.Annotations == nil {
+			r.Annotations = make(map[string]string)
 		}
-		r.Labels[cmpv1alpha1.RuleIDLabelKey] = ruleName
+		r.Annotations[cmpv1alpha1.RuleIDAnnotationKey] = ruleName
 
 		if err := controllerutil.SetControllerReference(pb, r, pcfg.Scheme); err != nil {
 			return err

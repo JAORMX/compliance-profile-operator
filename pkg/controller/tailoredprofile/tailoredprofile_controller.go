@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -172,12 +173,7 @@ func (r *ReconcileTailoredProfile) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
-	// Set TailoredProfile instance as the owner and controller
-	if err := controllerutil.SetControllerReference(instance, tpcm, r.scheme); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	return r.ensureOutputObject(instance, tpcm, reqLogger)
+	return r.ensureOutputObject(instance, tpcm, pb, reqLogger)
 }
 
 // validates the given TailoredProfile. true means that we can continue since the
@@ -195,6 +191,7 @@ func (r *ReconcileTailoredProfile) validateTailoredProfile(tp *compliancev1alpha
 
 	switch tp.Spec.OutputType {
 	case compliancev1alpha1.ConfigMapOutput: // Do nothing, we're good
+	case compliancev1alpha1.PolicyOutput: // Do nothing, we're good
 	case "":
 		tpCopy := tp.DeepCopy()
 		tpCopy.Spec.OutputType = compliancev1alpha1.ConfigMapOutput
@@ -260,13 +257,13 @@ func (r *ReconcileTailoredProfile) getVariablesFromSelections(tp *compliancev1al
 	return variableList, false, nil
 }
 
-func (r *ReconcileTailoredProfile) updateTailoredProfileStatusReady(tp *compliancev1alpha1.TailoredProfile, tpcm *corev1.ConfigMap) error {
+func (r *ReconcileTailoredProfile) updateTailoredProfileStatusReady(tp *compliancev1alpha1.TailoredProfile, out metav1.Object) error {
 	// Never update the original (update the copy)
 	tpCopy := tp.DeepCopy()
 	tpCopy.Status.State = compliancev1alpha1.TailoredProfileStateReady
 	tpCopy.Status.OutputRef = compliancev1alpha1.OutputRef{
-		Name:      tpcm.Name,
-		Namespace: tpcm.Namespace,
+		Name:      out.GetName(),
+		Namespace: out.GetNamespace(),
 	}
 	tpCopy.Status.ID = xccdf.GetXCCDFProfileID(tp)
 	return r.client.Status().Update(context.TODO(), tpCopy)
@@ -293,10 +290,12 @@ func (r *ReconcileTailoredProfile) getProfileBundleFromProfile(p *compliancev1al
 	return &pb, err
 }
 
-func (r *ReconcileTailoredProfile) ensureOutputObject(tp *compliancev1alpha1.TailoredProfile, cm *corev1.ConfigMap, logger logr.Logger) (reconcile.Result, error) {
+func (r *ReconcileTailoredProfile) ensureOutputObject(tp *compliancev1alpha1.TailoredProfile, cm *corev1.ConfigMap, pb *compliancev1alpha1.ProfileBundle, logger logr.Logger) (reconcile.Result, error) {
 	switch tp.Spec.OutputType {
-	case compliancev1alpha1.ConfigMapOutput: // Do nothing, we're good
+	case compliancev1alpha1.ConfigMapOutput:
 		return r.ensureConfigMapOutputObject(tp, cm, logger)
+	case compliancev1alpha1.PolicyOutput:
+		return r.ensurePolicyOutputObject(tp, cm, pb, logger)
 	default:
 		logger.Info("WARNING: unkown output type. We shouldn't get here as this should have been validated already")
 	}
@@ -304,6 +303,11 @@ func (r *ReconcileTailoredProfile) ensureOutputObject(tp *compliancev1alpha1.Tai
 }
 
 func (r *ReconcileTailoredProfile) ensureConfigMapOutputObject(tp *compliancev1alpha1.TailoredProfile, tpcm *corev1.ConfigMap, logger logr.Logger) (reconcile.Result, error) {
+	// Set TailoredProfile instance as the owner and controller
+	if err := controllerutil.SetControllerReference(tp, tpcm, r.scheme); err != nil {
+		return reconcile.Result{}, err
+	}
+
 	// Check if this ConfigMap already exists
 	found := &corev1.ConfigMap{}
 	err := r.client.Get(context.TODO(), types.NamespacedName{Name: tpcm.Name, Namespace: tpcm.Namespace}, found)
@@ -333,6 +337,102 @@ func (r *ReconcileTailoredProfile) ensureConfigMapOutputObject(tp *compliancev1a
 	return reconcile.Result{}, nil
 }
 
+func (r *ReconcileTailoredProfile) ensurePolicyOutputObject(tp *compliancev1alpha1.TailoredProfile, tpcm *corev1.ConfigMap, pb *compliancev1alpha1.ProfileBundle, logger logr.Logger) (reconcile.Result, error) {
+	objKey := types.NamespacedName{Name: tp.GetName(), Namespace: tp.GetNamespace()}
+	// reset namespace
+	tpcm.SetNamespace("")
+	cmUnstructured, err := runtime.DefaultUnstructuredConverter.ToUnstructured(tpcm)
+	if err != nil {
+		updateErr := r.updateTailoredProfileStatusError(
+			tp,
+			fmt.Errorf("Couldn't convert ConfigMap to Unstructured: %s", err),
+		)
+		return reconcile.Result{}, updateErr
+	}
+
+	// TODO(jaosorior): Import library and use actual object instead of unstructured
+	suiteObj := map[string]interface{}{
+		"apiVersion": "compliance.openshift.io/v1alpha1",
+		"kind":       "ComplianceSuite",
+		"metadata": map[string]interface{}{
+			"name": objKey.Name,
+		},
+		"spec": map[string]interface{}{
+			"schedule":              "0 1 * * *",
+			"autoApplyRemediations": false,
+			"scans": []interface{}{
+				map[string]interface{}{
+					"name":         objKey.Name + "-worker-scan",
+					"profile":      xccdf.GetXCCDFProfileID(tp),
+					"content":      pb.Spec.ContentFile,
+					"contentImage": pb.Spec.ContentImage,
+					"nodeSelector": map[string]interface{}{
+						"node-role.kubernetes.io/worker": "",
+					},
+					"tailoringConfigMap": map[string]interface{}{
+						"name": tpcm.GetName(),
+					},
+				},
+			},
+		},
+	}
+
+	// TODO(jaosorior): Import library and use actual object instead of unstructured
+	policyObj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "policy.mcm.ibm.com/v1alpha1",
+			"kind":       "Policy",
+			"metadata": map[string]interface{}{
+				"name":      objKey.Name,
+				"namespace": objKey.Namespace,
+			},
+			"spec": map[string]interface{}{
+				"disabled":          false,
+				"remediationAction": "inform",
+				"namespaces": map[string]interface{}{
+					"exclude": []interface{}{"kube-*"},
+					"include": []interface{}{"default"},
+				},
+				"policy-templates": []interface{}{
+					map[string]interface{}{
+						"objectDefinition": cmUnstructured,
+					},
+					map[string]interface{}{
+						"objectDefinition": suiteObj,
+					},
+				},
+			},
+		},
+	}
+	// Check if this ConfigMap already exists
+	found := policyObj.DeepCopy()
+	err = r.client.Get(context.TODO(), objKey, found)
+	if err != nil && errors.IsNotFound(err) {
+		// update status
+		err = r.updateTailoredProfileStatusReady(tp, tpcm)
+		if err != nil {
+			logger.Error(err, "Couldn't update TailoredProfile status")
+			return reconcile.Result{}, err
+		}
+
+		// create Policy
+		logger.Info("Creating a new Policy", "Policy.Namespace", objKey.Namespace, "Policy.Name", objKey.Name)
+		err = r.client.Create(context.TODO(), policyObj)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+
+		// Policy created successfully - don't requeue
+		return reconcile.Result{}, nil
+	} else if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	// Policy already exists - don't requeue
+	logger.Info("Skip reconcile: Policy already exists", "Policy.Namespace", found.GetNamespace(), "Policy.Name", found.GetName())
+	return reconcile.Result{}, nil
+}
+
 func getProfileBundleReferenceFromProfile(p *compliancev1alpha1.Profile) (*metav1.OwnerReference, error) {
 	for _, ref := range p.GetOwnerReferences() {
 		if ref.Kind == "ProfileBundle" && ref.APIVersion == compliancev1alpha1.SchemeGroupVersion.String() {
@@ -348,6 +448,10 @@ func newTailoredProfileCM(tp *compliancev1alpha1.TailoredProfile) *corev1.Config
 		"tailored-profile": tp.Name,
 	}
 	return &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      tp.Name + "-tp",
 			Namespace: tp.Namespace,

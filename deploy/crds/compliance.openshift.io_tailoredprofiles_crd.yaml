@@ -81,6 +81,9 @@ spec:
             outputType:
               description: Defines the type of output that the tailored profile will
                 do.
+              enum:
+              - ConfigMap
+              - Policy
               type: string
             setValues:
               description: Sets the referenced variables to selected values

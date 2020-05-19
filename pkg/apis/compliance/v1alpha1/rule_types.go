@@ -5,11 +5,11 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-// RuleIDLabelKey exposes the DNS-friendly name of a rule as a label.
+// RuleIDAnnotationKey exposes the DNS-friendly name of a rule as an annotation.
 // This provides a way to link a result to a Rule object.
 // TODO(jaosorior): Decide where this actually belongs... should it be
 // here or in the compliance-operator?
-const RuleIDLabelKey = "compliance.openshift.io/rule"
+const RuleIDAnnotationKey = "compliance.openshift.io/rule"
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 

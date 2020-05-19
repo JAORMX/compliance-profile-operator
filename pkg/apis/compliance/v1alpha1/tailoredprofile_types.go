@@ -9,6 +9,9 @@ import (
 type TailoredProfileOutputType string
 
 const (
+	// PolicyOutput specifies that the TailoredProfile should
+	// generate a Policy object.
+	PolicyOutput TailoredProfileOutputType = "Policy"
 	// ConfigMapOutput specifies that the TailoredProfile should
 	// generate a ConfigMap object (default).
 	ConfigMapOutput TailoredProfileOutputType = "ConfigMap"
@@ -41,6 +44,7 @@ type TailoredProfileSpec struct {
 	// Overwrites the description of the extended profile (optional)
 	Description string `json:"description,omitempty"`
 	// Defines the type of output that the tailored profile will do.
+	// +kubebuilder:validation:Enum=ConfigMap;Policy
 	OutputType TailoredProfileOutputType `json:"outputType,omitempty"`
 	// Enables the referenced rules
 	// +optional
