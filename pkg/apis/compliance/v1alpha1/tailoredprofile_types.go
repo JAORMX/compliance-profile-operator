@@ -6,6 +6,17 @@ import (
 
 // FIXME: move name/rationale to a common struct with an interface?
 
+type TailoredProfileOutputType string
+
+const (
+	// PolicyOutput specifies that the TailoredProfile should
+	// generate a Policy object.
+	PolicyOutput TailoredProfileOutputType = "Policy"
+	// ConfigMapOutput specifies that the TailoredProfile should
+	// generate a ConfigMap object (default).
+	ConfigMapOutput TailoredProfileOutputType = "ConfigMap"
+)
+
 // RuleReferenceSpec specifies a rule to be selected/deselected, as well as the reason why
 type RuleReferenceSpec struct {
 	// Name of the rule that's being referenced
@@ -32,6 +43,9 @@ type TailoredProfileSpec struct {
 	Title string `json:"title,omitempty"`
 	// Overwrites the description of the extended profile (optional)
 	Description string `json:"description,omitempty"`
+	// Defines the type of output that the tailored profile will do.
+	// +kubebuilder:validation:Enum=ConfigMap;Policy
+	OutputType TailoredProfileOutputType `json:"outputType,omitempty"`
 	// Enables the referenced rules
 	// +optional
 	// +nullable
@@ -62,15 +76,15 @@ const (
 type TailoredProfileStatus struct {
 	// The XCCDF ID of the tailored profile
 	ID string `json:"id,omitempty"`
-	// Points to the generated configMap with the tailoring
-	TailoringConfigMap TailoringConfigMapRef `json:"tailoringConfigMap,omitempty"`
+	// Points to the generated resource of the type specified in "outputType"
+	OutputRef OutputRef `json:"outputRef,omitempty"`
 	// The current state of the tailored profile
 	State        TailoredProfileState `json:"state,omitempty"`
 	ErrorMessage string               `json:"errorMessagae,omitempty"`
 }
 
-// TailoringConfigMapRef is a reference to the configMap created from the tailored profile
-type TailoringConfigMapRef struct {
+// OutputRef is a reference to the object created from the tailored profile
+type OutputRef struct {
 	Name      string `json:"name"`
 	Namespace string `json:"namespace"`
 }
