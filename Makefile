@@ -85,7 +85,7 @@ help: ## Show this help screen
 
 
 .PHONY: image
-image: operator-sdk build operator-image profileparser-image ## Build the compliance-profile-operator container image
+image: operator-sdk operator-image profileparser-image ## Build the compliance-profile-operator container image
 
 .PHONY: operator-image
 operator-image: operator-sdk
