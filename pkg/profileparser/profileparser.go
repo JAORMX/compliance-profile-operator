@@ -2,19 +2,20 @@ package profileparser
 
 import (
 	"fmt"
+	"io"
+	"regexp"
+	"strings"
+
 	cmpv1alpha1 "github.com/JAORMX/compliance-profile-operator/pkg/apis/compliance/v1alpha1"
 	"github.com/JAORMX/compliance-profile-operator/pkg/xccdf"
 	"github.com/subchen/go-xmldom"
-	"io"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
-	"regexp"
 	runtimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"strings"
 )
 
 const (
@@ -104,7 +105,12 @@ func ParseVariablesAndDo(contentDom *xmldom.Document, pcfg *ParserConfig, action
 
 		description := varObj.FindOneByName("description")
 		if description != nil {
-			v.Description = description.Text
+			desc, err := xccdf.GetDescriptionFromXMLString(description.XML())
+			if err != nil {
+				log.Error(err, "couldn't parse a rule's description")
+				desc = ""
+			}
+			v.Description = desc
 		}
 
 		v.Type = getVariableType(varObj)
@@ -220,13 +226,28 @@ func ParseRulesAndDo(contentDom *xmldom.Document, pcfg *ParserConfig, action fun
 			AvailableFixes: nil,
 		}
 		if description != nil {
-			p.Description = description.Text
+			desc, err := xccdf.GetDescriptionFromXMLString(description.XML())
+			if err != nil {
+				log.Error(err, "couldn't parse a rule's description")
+				desc = ""
+			}
+			p.Description = desc
 		}
 		if rationale != nil {
-			p.Rationale = rationale.Text
+			rat, err := xccdf.GetRationaleFromXMLString(rationale.XML())
+			if err != nil {
+				log.Error(err, "couldn't parse a rule's rationale")
+				rat = ""
+			}
+			p.Rationale = rat
 		}
 		if warning != nil {
-			p.Warning = warning.Text
+			warn, err := xccdf.GetWarningFromXMLString(warning.XML())
+			if err != nil {
+				log.Error(err, "couldn't parse a rule's warning")
+				warn = ""
+			}
+			p.Warning = warn
 		}
 		if severity != nil {
 			p.Severity = severity.Text
